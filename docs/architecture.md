@@ -42,8 +42,8 @@ tools: {common: [get_fields, compute_indicator], own: [tech_candidates, tech_evi
 candidates_tool: tech_candidates   # 픽 ⊆ 이 도구가 반환한 종목
 params: {min_history: 120, rsi_max: 70, vol_ratio_min: 1.0, candidate_limit: 30}   # 제안값(Q2·Q4)
 universe:                          # 기법별 기본 범위(§6.2 프리셋 ID, 여러 개 가능). 실행 폼 범위 체크박스로 덮어쓸 수 있음
-  KR: {default: [kospi200], allowed: [kr_all, kospi, kosdaq, kospi200, kosdaq150]}
-  US: {default: [sp100],    allowed: [sp500, sp100, nasdaq100, dow30]}     # 기본값은 제안(PRD Q34)
+  KR: {default: [kospi200], allowed: all}   # all = §6.2 프리셋 전부 허용, 또는 [kospi200, kosdaq150, …]
+  US: {default: [sp100],    allowed: all}   # 기본값은 제안(PRD Q34)
   combine: union                   # union = 합집합에서 시장별 최대 3(제안) | per_universe = 범위마다 최대 3(비용 × 범위 수) — PRD Q37
 checklist:                         # 순서대로 저장. by=code는 도구 값이 판정, by=llm은 LLM 판정 + 근거
   - {id: trend,    by: code, from: tech_evidence.aligned}
@@ -133,12 +133,20 @@ def postprocess(draft: PickDraft, ev: Evidence, ctx: ToolContext) -> PickDraft: 
 
 | ID | 범위 | 1순위 소스 | 근사 소스(1순위 실패 시) |
 |---|---|---|---|
-| `kr_all` · `kospi` · `kosdaq` | 국장 전체 / 코스피 / 코스닥 | 네이버 국장 종목 목록 | pykrx 시장별 티커 |
-| `kospi200` | 코스피200 | pykrx 지수 구성(`get_index_portfolio_deposit_file("1028")`, KRX 로그인 필요 여부 미확인) | KODEX 200 ETF 구성(**근사**, 네이버) |
-| `kosdaq150` | 코스닥150 | pykrx 지수 구성(지수 코드 미확인) | 코스닥150 ETF 구성(근사) |
-| `sp500` | S&P 500 | 네이버 지수 구성(`.INX` enrollStocks, 응답 미검증) | ETF 구성(근사) |
-| `sp100` | S&P 100 | 네이버 지수 구성(지수 코드 미확인) | iShares S&P 100(OEF) ETF 구성(근사) |
-| `nasdaq100` · `dow30` | 나스닥100 / 다우30 | 네이버 지수 구성(코드 미확인) | QQQ / DIA ETF 구성(근사) |
+| `kr_all` · `kospi` · `kosdaq` | 국장 전체 / 코스피 전체 / 코스닥 전체 | 네이버 국장 종목 목록 | pykrx 시장별 티커 |
+| `kospi200` | 코스피200 | pykrx 지수 구성 `1028` | 코스피200 ETF 보유 종목 |
+| `kospi100` · `kospi50` | 코스피100 / 코스피50 | pykrx 지수 구성 `1034` / `1035` | 해당 지수 ETF 보유 종목(ETF 미확인) |
+| `kosdaq150` | 코스닥150 | pykrx 지수 구성 `2203`(2차 출처) | 코스닥150 ETF 보유 종목 |
+| `krx300` | KRX300 | pykrx 지수 구성(코드 미확인) | KRX300 ETF 보유 종목 |
+| `us_all` | 미장 전체(NYSE·나스닥·NYSE American 등 상장 보통주) | 나스닥 공식 심볼 목록 `nasdaqlisted.txt` + `otherlisted.txt`(매일 갱신) | 네이버 미국 종목 목록 |
+| `nasdaq` · `nyse` | 나스닥 상장 전체 / NYSE 상장 전체 | 같은 심볼 목록(거래소 구분) | 네이버 미국 종목 목록 |
+| `sp500` | S&P 500 | 네이버 지수 구성(`.INX` enrollStocks, 응답 미검증) | SPY 등 ETF 보유 종목 |
+| `sp100` | S&P 100 | 네이버 지수 구성(지수 코드 미확인) | OEF ETF 보유 종목 |
+| `nasdaq100` · `dow30` | 나스닥100 / 다우30 | 네이버 지수 구성(코드 미확인) | QQQ / DIA ETF 보유 종목 |
+| `sox` | 필라델피아 반도체 | 네이버 지수 구성(`.SOX`, 주식킹이 지수 시세 조회에 사용 중, 구성 응답 미검증) | SOXX ETF 보유 종목 |
+| `russell2000` | 러셀2000 | 무료 공식 소스 미확인 | IWM ETF 보유 종목 |
+- **거래소 전체 범위(`kr_all`·`kospi`·`kosdaq`·`us_all`·`nasdaq`·`nyse`):** 보통주만 쓴다(ETF·테스트 종목·워런트·우선주 등은 심볼 목록의 구분값과 이름으로 제외 — 구분 규칙은 구현 때 실제 파일로 확인). 종목 수가 수천 개라(정확한 수 미확인) 일봉 같은 무거운 데이터는 가벼운 값(시가총액·거래대금)으로 먼저 줄인 뒤에만 조회한다 — 기법 1차 필터의 유동성 하한을 먼저 적용. LLM 비용은 후보 상한 N이 있어 범위 크기와 무관하지만, 데이터 수집 시간·요청 수는 늘어난다.
+- **소스 출처:** pykrx 지수 코드 `1028`·`1034`·`1035`는 [pykrx README](https://github.com/sharebook-kr/pykrx), `2203`은 [WikiDocs](https://wikidocs.net/226894)(2차 출처). 나스닥 심볼 목록은 [Nasdaq Trader](https://nasdaqtrader.com/) 공개 파일.
 - **기록:** 실행마다 범위별 스냅샷(`universe_id`·출처·근사 여부·기준일·종목 수·해시)을 단위 레코드에 저장한다. 픽 행에는 `universe_set`(그 단위에 쓴 범위 집합, 예: `kospi200+kosdaq150`)과 `in_universes`(그 종목이 속한 범위들)를 넣는다 → 통계를 범위 집합별·범위별로 나눠 볼 수 있다. 근사 소스를 쓴 범위는 결과 화면에 "근사"로 표시한다.
 - **새 범위 추가:** `config/universes.yaml`에 항목 추가 + 소스 함수 등록. 실행 폼 선택지는 동기화 스크립트가 갱신(§10).
 
@@ -214,17 +222,19 @@ on:
       technical:    {type: boolean, default: true, description: "기술적 분석"}
       buffett_moat: {type: boolean, default: true, description: "워렌 버핏(해자)"}
       # ↑ 생성 구간 끝
-      # ↓ 범위 체크박스: config/universes.yaml 프리셋마다 1개, 생성기가 생성. 시장별로 하나도 안 고르면 기법 기본 범위
+      # ↓ 범위 체크박스: universes.yaml에서 `checkbox: true`인 자주 쓰는 범위만(생성기가 생성). 시장별로 하나도 안 고르면 기법 기본 범위
       u_kr_all:     {type: boolean, default: false, description: "국장 범위: 전체"}
-      u_kospi:      {type: boolean, default: false, description: "국장 범위: 코스피"}
-      u_kosdaq:     {type: boolean, default: false, description: "국장 범위: 코스닥"}
+      u_kospi:      {type: boolean, default: false, description: "국장 범위: 코스피 전체"}
+      u_kosdaq:     {type: boolean, default: false, description: "국장 범위: 코스닥 전체"}
       u_kospi200:   {type: boolean, default: false, description: "국장 범위: 코스피200"}
       u_kosdaq150:  {type: boolean, default: false, description: "국장 범위: 코스닥150"}
+      u_us_all:     {type: boolean, default: false, description: "미장 범위: 전체"}
+      u_nasdaq:     {type: boolean, default: false, description: "미장 범위: 나스닥 전체"}
       u_sp500:      {type: boolean, default: false, description: "미장 범위: S&P 500"}
       u_sp100:      {type: boolean, default: false, description: "미장 범위: S&P 100"}
       u_nasdaq100:  {type: boolean, default: false, description: "미장 범위: 나스닥100"}
-      u_dow30:      {type: boolean, default: false, description: "미장 범위: 다우30"}
       # ↑ 생성 구간 끝
+      extra_universes: {type: string, default: "", description: "추가 범위 ID(쉼표): kospi100, kospi50, krx300, nyse, dow30, sox, russell2000"}
       markets:      {type: choice, options: [all, KR, US], default: all}
       mode:         {type: choice, options: [screen, track-only], default: screen}   # track-only = LLM 없이 수익률·통계만 갱신
       dry_run:      {type: boolean, default: false}   # mock 패널·커밋/배포 없음·LLM 비용 0
@@ -235,10 +245,10 @@ on:
 | A. 문자열 입력 + 레지스트리 검증 | 없음. 오타·hold는 즉시 실패 + 유효 ID 목록 | 기각 — 사용자가 **기법별 선택** 요청 |
 | B. 기법별 체크박스 + 생성기 + CI 동기화 검사 | 기법 추가 PR에 생성기가 만든 워크플로 변경이 함께 들어감(손 수정 없음). CI가 레지스트리와 체크박스 불일치를 실패로 처리 | **채택** |
 | C. choice 드롭다운(단일 선택) + 생성기 | B와 같지만 한 번에 1개(또는 all)만 선택 | 대안 |
-- **제약:** 입력 최대 25개 → 고정 입력 3개(markets·mode·dry_run) + 범위 체크박스 9개를 빼면 **기법 체크박스는 최대 13개**. 넘으면 기법은 C(드롭다운)로, 범위가 늘면 자주 쓰는 조합만 체크박스로 두는 방식으로 전환. 워크플로 파일 변경 push에는 `workflows` 권한이 필요하다는 보고가 있어([커뮤니티 보고](https://github.community/t/refusing-to-allow-a-github-app-to-create-or-update-workflow-without-workflows-permission/182573), 공식 문구 미확인) 이 세션의 GitHub 앱 권한으로 push가 막히면 사용자가 그 변경만 직접 반영해야 함 → 첫 기법 추가 때 확인. GitHub Mobile에서 boolean 입력이 어떻게 보이는지 **미확인**(dry_run으로 확인).
+- **제약:** 입력 최대 25개 → 고정 입력 4개(markets·extra_universes·mode·dry_run) + 범위 체크박스 10개를 빼면 **기법 체크박스는 최대 11개**. 범위 프리셋 17개를 전부 체크박스로 만들면 기법이 5개로 줄어서, 자주 쓰는 10개만 체크박스로 두고 나머지는 `extra_universes`에 ID로 입력한다(체크박스 대상은 `universes.yaml`의 `checkbox` 값으로 바꿀 수 있음, PRD Q38). 워크플로 파일 변경 push에는 `workflows` 권한이 필요하다는 보고가 있어([커뮤니티 보고](https://github.community/t/refusing-to-allow-a-github-app-to-create-or-update-workflow-without-workflows-permission/182573), 공식 문구 미확인) 이 세션의 GitHub 앱 권한으로 push가 막히면 사용자가 그 변경만 직접 반영해야 함 → 첫 기법 추가 때 확인. GitHub Mobile에서 boolean 입력이 어떻게 보이는지 **미확인**(dry_run으로 확인).
 - 확인한 사실: choice `options`는 YAML 정적 목록, 동적 채우기 미지원([Community #12029](https://github.com/orgs/community/discussions/12029), 2025-12 기준 backlog) · 입력 최대 25개([Changelog 2025-12-04](https://github.blog/changelog/2025-12-04-actions-workflow-dispatch-workflows-now-support-25-inputs/)) · GitHub Mobile에서 workflow_dispatch 실행 가능([Changelog 2024-07-30](https://github.blog/changelog/2024-07-30-run-workflows-set-as-workflow_dispatch-manually), 입력 UI 세부 미확인) · 잡 최대 6시간([Docs](https://docs.github.com/en/actions/reference/actions-limits)).
 - 잡: checkout → Python → `screener validate` → `run` → `track` → `site` → `results/` 커밋·push(충돌 시 rebase 재시도) → Pages 배포(upload-pages-artifact + deploy-pages, `site/`만) → 실행 요약(단위 상태·비용 표·유효 기법 ID).
-- `permissions: {contents: write, pages: write, id-token: write}` · `concurrency: {group: screening, cancel-in-progress: false}` · `timeout-minutes`(Q10). 입력은 `env`로 넘겨 허용값(체크박스 true/false·선택지 목록)만 통과시키는 검증(스크립트 인젝션 방지). 비밀값은 실행 스텝 env에만: `ANTHROPIC_API_KEY`·`GEMINI_API_KEY`·`DART_API_KEY`·`KRX_ID`·`KRX_PW`. 저장소가 **공개**(GitHub API로 확인)라 Pages는 Free로 가능([GitHub 요금제](https://help.github.com/articles/github-s-products))하지만 결과 사이트·커밋된 결과·Actions 로그가 모두 공개 → 비밀값·계정 정보 로그 출력 금지.
+- `permissions: {contents: write, pages: write, id-token: write}` · `concurrency: {group: screening, cancel-in-progress: false}` · `timeout-minutes`(Q10). 입력은 `env`로 넘겨 허용값(체크박스 true/false·선택지 목록, `extra_universes`는 `^[a-z0-9_, ]*$` + 등록된 범위 ID)만 통과시키는 검증(스크립트 인젝션 방지, 모르는 ID는 즉시 실패 + 유효 ID 목록 출력). 비밀값은 실행 스텝 env에만: `ANTHROPIC_API_KEY`·`GEMINI_API_KEY`·`DART_API_KEY`·`KRX_ID`·`KRX_PW`. 저장소가 **공개**(GitHub API로 확인)라 Pages는 Free로 가능([GitHub 요금제](https://help.github.com/articles/github-s-products))하지만 결과 사이트·커밋된 결과·Actions 로그가 모두 공개 → 비밀값·계정 정보 로그 출력 금지.
 - `ci.yml`(pull_request): pytest(계약·단위·시나리오), mock 패널·네트워크 차단·비밀값 없음, lock 검사, 출력물 금지어 스캔, 시크릿 스캔(AC12).
 
 ## 11. 테스트
