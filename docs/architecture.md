@@ -41,9 +41,10 @@ data: {required: [ohlcv_daily, traded_value_20d], optional: [sector]}    # 필�
 tools: {common: [get_fields, compute_indicator], own: [tech_candidates, tech_evidence]}
 candidates_tool: tech_candidates   # 픽 ⊆ 이 도구가 반환한 종목
 params: {min_history: 120, rsi_max: 70, vol_ratio_min: 1.0, candidate_limit: 30}   # 제안값(Q2·Q4)
-universe:                          # 기법별 기본 범위(§6.2 프리셋 ID). 실행 폼에서 덮어쓸 수 있음
-  KR: {default: kospi200, allowed: [kr_all, kospi, kosdaq, kospi200, kosdaq150]}
-  US: {default: sp100,    allowed: [sp500, sp100, nasdaq100, dow30]}       # 기본값은 제안(PRD Q34)
+universe:                          # 기법별 기본 범위(§6.2 프리셋 ID, 여러 개 가능). 실행 폼 범위 체크박스로 덮어쓸 수 있음
+  KR: {default: [kospi200], allowed: [kr_all, kospi, kosdaq, kospi200, kosdaq150]}
+  US: {default: [sp100],    allowed: [sp500, sp100, nasdaq100, dow30]}     # 기본값은 제안(PRD Q34)
+  combine: union                   # union = 합집합에서 시장별 최대 3(제안) | per_universe = 범위마다 최대 3(비용 × 범위 수) — PRD Q37
 checklist:                         # 순서대로 저장. by=code는 도구 값이 판정, by=llm은 LLM 판정 + 근거
   - {id: trend,    by: code, from: tech_evidence.aligned}
   - {id: momentum, by: llm,  needs: [tech_evidence]}
@@ -94,7 +95,7 @@ def postprocess(draft: PickDraft, ev: Evidence, ctx: ToolContext) -> PickDraft: 
 
 ## 5. 공통 실행 파이프라인
 1. 입력 파싱(체크된 기법·시장·범위 덮어쓰기) → 레지스트리 로드 → 실행 단위(체크된 active 기법×시장) 확정. 체크박스와 레지스트리가 어긋나면 즉시 실패(동기화 필요). 제공자 키·단가 확인(없으면 LLM 호출 전 실패).
-2. 시장별 as_of 계산 → 단위별 범위 결정(덮어쓰기 > 기법 기본값, 허용 목록 검사) → 범위 구성종목 스냅샷(출처·종목 수·해시) → 범위 합집합 × 선언 필드 합집합을 1회 조회 → 동결·해시.
+2. 시장별 as_of 계산 → 단위별 범위 집합 결정(실행 폼에서 체크한 범위 > 기법 기본 범위, 허용 목록 밖 범위는 그 기법에서 제외·기록) → 범위별 구성종목 스냅샷(출처·근사 여부·종목 수·해시) → `combine`에 따라 합집합(중복 제거) 또는 범위별 단위로 분할 → 전체 범위 합집합 × 선언 필드 합집합을 1회 조회 → 동결·해시.
 3. 단위별(순차): 코어가 후보 도구를 먼저 실행(캐시). 통과 0이면 "현재 적격 종목 없음" + 통과 수 기록, LLM 미호출(F3·AC16).
 4. 예산 승인 → 불가면 이 단위부터 "예산 초과로 미실행".
 5. 라운드 0: Claude·Gemini 병렬 독립 실행(도구 루프 → `submit_verdicts`) → 검증기 → postprocess.
@@ -104,7 +105,7 @@ def postprocess(draft: PickDraft, ev: Evidence, ctx: ToolContext) -> PickDraft: 
 
 ## 6. 데이터 계층
 - **필드 카탈로그**(`data/catalog.yaml`): `id·kind(series/snapshot/annual/quarterly/text)·unit·format·cost·ttl·시장별 어댑터`. cost=cheap은 유니버스 전체 선적재, expensive는 첫 요청 시 적재.
-- **어댑터**: `provides`·`universe(as_of)`·`fetch(fields, tickers, as_of) -> FieldFrame`(값 + missing_reason). 시장별 순서는 설정(`KR: [krx_pykrx, kr_dart]`, `US: [us_yfinance]`) → 소스 교체 = 어댑터 추가 + 설정 변경. 스로틀·재시도·백오프는 공통 래퍼.
+- **어댑터**: `provides`·`universe(as_of)`·`fetch(fields, tickers, as_of) -> FieldFrame`(값 + missing_reason). 시장별 순서는 설정(`KR: [naver_stock, krx_pykrx, kr_dart]`, `US: [naver_stock, us_yfinance]`, §6.1) → 소스 교체 = 어댑터 추가 + 설정 변경. 스로틀·재시도·백오프는 공통 래퍼.
 - **스냅샷**: 도구는 스냅샷만 읽는다. 늦게 적재한 값과 **조회 실패도 메모이즈** → 두 모델·모든 라운드가 같은 값을 본다. 해시는 기록, 파일은 Actions artifact(커밋 안 함). 실행 간 캐시(`actions/cache`)는 ttl이 긴 필드(연간 재무)만.
 - **기준일**: as_of = "마감시각+버퍼 ≤ 실행시각"인 마지막 거래일(대표 지수 일봉으로 확인). as_of 이후 봉(장중 미완성)은 버린다(AC4).
 - **결측**: None + 사유(not_provided·fetch_failed·insufficient_history·not_applicable), 대체값 금지, 표시는 "미확인". required 결측 종목은 후보 도구가 빼고 funnel에 집계. 소스 전체 실패는 그 시장 단위만 "실패(데이터: 사유)"(F11·AC13).
@@ -124,10 +125,13 @@ def postprocess(draft: PickDraft, ev: Evidence, ctx: ToolContext) -> PickDraft: 
 | ETF 구성(범위 근사용) | 국장 `/api/domestic/detail/{etfCode}/ETFComponent` · 미장 `/api/stockSecurity/etfs/v2/foreign/{reutersCode}/composition` |
 - **어댑터 순서(설정):** `KR: [naver_stock, krx_pykrx, kr_dart]`, `US: [naver_stock, us_yfinance]`. 네이버 실패 시 다음 소스로 넘어가고, 어느 소스 값인지 기록한다. 비공식 API라 언제든 바뀔 수 있음 → 응답 스키마 검사 실패 시 그 소스를 "실패"로 처리(빈 목록으로 바꾸지 않음).
 
-### 6.2 범위(유니버스) 프리셋 — 기법별로 제한
-- `config/universes.yaml`에 프리셋을 정의하고, 기법 매니페스트 `universe`가 시장별 기본값·허용 목록을 가진다. 실행 폼에서 시장별로 덮어쓸 수 있다(그 실행의 선택된 모든 기법에 적용, 허용 목록 밖이면 그 기법만 "실패(범위)").
+### 6.2 범위(유니버스) 프리셋 — 기법별로 제한, 여러 범위 동시 선택
+- `config/universes.yaml`에 프리셋을 정의하고, 기법 매니페스트 `universe`가 시장별 **기본 범위 목록**·허용 목록을 가진다.
+- **여러 범위:** 실행 폼에서 범위 체크박스를 여러 개 고를 수 있다(예: 코스피200 + 코스닥150, S&P 100 + 나스닥100). 시장별로 하나도 고르지 않으면 각 기법의 기본 범위를 쓴다. 고른 범위는 체크된 모든 기법에 적용하되, 기법의 허용 목록 밖 범위는 그 기법에서 빼고 기록한다(남는 범위가 없으면 그 기법×시장은 "실패(범위)").
+- **합치는 방식(`combine`, PRD Q37):** `union`(제안) = 고른 범위의 합집합(중복 종목 1번만)에서 시장별 최대 3종목 — LLM 비용은 범위 1개일 때와 비슷. `per_universe` = 범위마다 따로 최대 3종목 — 비용이 범위 수만큼 늘어남.
+- **근사(사용자 결정):** 공식 지수 구성종목을 못 받으면 해당 지수 추종 ETF 보유 종목으로 대신한다. ETF 보유 목록에서 현금·선물 등 주식이 아닌 항목은 뺀다. ETF 보유 목록 공시 시차는 미확인.
 
-| ID | 범위 | 1순위 소스 | 대체 소스 |
+| ID | 범위 | 1순위 소스 | 근사 소스(1순위 실패 시) |
 |---|---|---|---|
 | `kr_all` · `kospi` · `kosdaq` | 국장 전체 / 코스피 / 코스닥 | 네이버 국장 종목 목록 | pykrx 시장별 티커 |
 | `kospi200` | 코스피200 | pykrx 지수 구성(`get_index_portfolio_deposit_file("1028")`, KRX 로그인 필요 여부 미확인) | KODEX 200 ETF 구성(**근사**, 네이버) |
@@ -135,7 +139,7 @@ def postprocess(draft: PickDraft, ev: Evidence, ctx: ToolContext) -> PickDraft: 
 | `sp500` | S&P 500 | 네이버 지수 구성(`.INX` enrollStocks, 응답 미검증) | ETF 구성(근사) |
 | `sp100` | S&P 100 | 네이버 지수 구성(지수 코드 미확인) | iShares S&P 100(OEF) ETF 구성(근사) |
 | `nasdaq100` · `dow30` | 나스닥100 / 다우30 | 네이버 지수 구성(코드 미확인) | QQQ / DIA ETF 구성(근사) |
-- **기록:** 실행마다 범위 스냅샷(`universe_id`·출처·기준일·종목 수·해시)을 단위 레코드에 저장하고, 픽 행에 `universe_id`를 넣는다 → 통계를 범위별로 나눠 볼 수 있다. 근사 소스를 쓴 경우 `approx: true`로 표시한다.
+- **기록:** 실행마다 범위별 스냅샷(`universe_id`·출처·근사 여부·기준일·종목 수·해시)을 단위 레코드에 저장한다. 픽 행에는 `universe_set`(그 단위에 쓴 범위 집합, 예: `kospi200+kosdaq150`)과 `in_universes`(그 종목이 속한 범위들)를 넣는다 → 통계를 범위 집합별·범위별로 나눠 볼 수 있다. 근사 소스를 쓴 범위는 결과 화면에 "근사"로 표시한다.
 - **새 범위 추가:** `config/universes.yaml`에 항목 추가 + 소스 함수 등록. 실행 폼 선택지는 동기화 스크립트가 갱신(§10).
 
 ## 7. 공통 피처 라이브러리 · 공통 도구
@@ -193,12 +197,13 @@ class LLMProvider(Protocol):
 | pick_id · run_id · picked_at | `run:기법:시장:decider:종목`, 실행 시각(UTC·KST) |
 | strategy_id · strategy_version · criteria_hash | 통계 분리 키 |
 | market · exchange · ticker · name · passed_count | KR(KOSPI/KOSDAQ)/US, 1차 필터 통과 수 |
+| universe_set · in_universes · universe_approx | 단위에 쓴 범위 집합(예: `kospi200+kosdaq150`), 이 종목이 속한 범위들, 근사 소스 사용 여부 |
 | decider · stage · verdict · agreed · rounds_used | `consensus` / `model:anthropic:<모델>` / `model:gemini:<모델>`, `r0`(독립)/`final`, 판정은 코드값 |
 | reasons · checklist · missing · ext | 사유(도구 수치, 합의 행은 두 모델 사유), 단계별 결과+근거, 미확인 목록, 기법 확장(예: SEPA pivot·stop·R/R) |
 | ref_prices[] | `{kind: prev_close/entry…, date, price, currency, source, status: resolved/pending}` |
 | llm · snapshot_sha256 · prompt_sha256 | 재현·감사 |
 - 적격·관찰 모두 행으로 남기고 통계 기본은 적격(관찰 추적 Q23). PRD의 "결과 레코드"(AC2·AC3) = `decider=consensus`·적격 행(0~3건). 수익률 = 최신 종가 ÷ 기준가 − 1(기준가 종류별, 같은 소스·같은 조정 기준 — Q14), 최신 종가 날짜 함께 표시. pending은 계산 안 함. 상장폐지·조회 실패는 빼지 않고 상태 표시(생존편향 방지).
-- 통계 키: 기법 × version × 시장 × decider × 기준가 종류 → 건수·평균·중앙값·승률(>0)·평균 보유일. 모델 vs 합의 비교는 합의가 성립한 단위끼리(매칭). 추이: agree_r0·agree_final·재검토 비율·실행당 비용.
+- 통계 키: 기법 × version × 시장 × 범위 집합 × decider × 기준가 종류 → 건수·평균·중앙값·승률(>0)·평균 보유일. 모델 vs 합의 비교는 합의가 성립한 단위끼리(매칭). 추이: agree_r0·agree_final·재검토 비율·실행당 비용.
 
 ## 10. GitHub Actions
 ```yaml
@@ -209,9 +214,18 @@ on:
       technical:    {type: boolean, default: true, description: "기술적 분석"}
       buffett_moat: {type: boolean, default: true, description: "워렌 버핏(해자)"}
       # ↑ 생성 구간 끝
+      # ↓ 범위 체크박스: config/universes.yaml 프리셋마다 1개, 생성기가 생성. 시장별로 하나도 안 고르면 기법 기본 범위
+      u_kr_all:     {type: boolean, default: false, description: "국장 범위: 전체"}
+      u_kospi:      {type: boolean, default: false, description: "국장 범위: 코스피"}
+      u_kosdaq:     {type: boolean, default: false, description: "국장 범위: 코스닥"}
+      u_kospi200:   {type: boolean, default: false, description: "국장 범위: 코스피200"}
+      u_kosdaq150:  {type: boolean, default: false, description: "국장 범위: 코스닥150"}
+      u_sp500:      {type: boolean, default: false, description: "미장 범위: S&P 500"}
+      u_sp100:      {type: boolean, default: false, description: "미장 범위: S&P 100"}
+      u_nasdaq100:  {type: boolean, default: false, description: "미장 범위: 나스닥100"}
+      u_dow30:      {type: boolean, default: false, description: "미장 범위: 다우30"}
+      # ↑ 생성 구간 끝
       markets:      {type: choice, options: [all, KR, US], default: all}
-      universe_kr:  {type: choice, options: [기법 기본값, kr_all, kospi, kosdaq, kospi200, kosdaq150], default: 기법 기본값}
-      universe_us:  {type: choice, options: [기법 기본값, sp500, sp100, nasdaq100, dow30], default: 기법 기본값}
       mode:         {type: choice, options: [screen, track-only], default: screen}   # track-only = LLM 없이 수익률·통계만 갱신
       dry_run:      {type: boolean, default: false}   # mock 패널·커밋/배포 없음·LLM 비용 0
 ```
@@ -221,7 +235,7 @@ on:
 | A. 문자열 입력 + 레지스트리 검증 | 없음. 오타·hold는 즉시 실패 + 유효 ID 목록 | 기각 — 사용자가 **기법별 선택** 요청 |
 | B. 기법별 체크박스 + 생성기 + CI 동기화 검사 | 기법 추가 PR에 생성기가 만든 워크플로 변경이 함께 들어감(손 수정 없음). CI가 레지스트리와 체크박스 불일치를 실패로 처리 | **채택** |
 | C. choice 드롭다운(단일 선택) + 생성기 | B와 같지만 한 번에 1개(또는 all)만 선택 | 대안 |
-- **제약:** 입력 최대 25개 → 고정 입력 5개(markets·universe_kr·universe_us·mode·dry_run)를 빼면 **기법 체크박스는 최대 20개**. 넘으면 C로 전환. 워크플로 파일 변경 push에는 `workflows` 권한이 필요하다는 보고가 있어([커뮤니티 보고](https://github.community/t/refusing-to-allow-a-github-app-to-create-or-update-workflow-without-workflows-permission/182573), 공식 문구 미확인) 이 세션의 GitHub 앱 권한으로 push가 막히면 사용자가 그 변경만 직접 반영해야 함 → 첫 기법 추가 때 확인. GitHub Mobile에서 boolean 입력이 어떻게 보이는지 **미확인**(dry_run으로 확인).
+- **제약:** 입력 최대 25개 → 고정 입력 3개(markets·mode·dry_run) + 범위 체크박스 9개를 빼면 **기법 체크박스는 최대 13개**. 넘으면 기법은 C(드롭다운)로, 범위가 늘면 자주 쓰는 조합만 체크박스로 두는 방식으로 전환. 워크플로 파일 변경 push에는 `workflows` 권한이 필요하다는 보고가 있어([커뮤니티 보고](https://github.community/t/refusing-to-allow-a-github-app-to-create-or-update-workflow-without-workflows-permission/182573), 공식 문구 미확인) 이 세션의 GitHub 앱 권한으로 push가 막히면 사용자가 그 변경만 직접 반영해야 함 → 첫 기법 추가 때 확인. GitHub Mobile에서 boolean 입력이 어떻게 보이는지 **미확인**(dry_run으로 확인).
 - 확인한 사실: choice `options`는 YAML 정적 목록, 동적 채우기 미지원([Community #12029](https://github.com/orgs/community/discussions/12029), 2025-12 기준 backlog) · 입력 최대 25개([Changelog 2025-12-04](https://github.blog/changelog/2025-12-04-actions-workflow-dispatch-workflows-now-support-25-inputs/)) · GitHub Mobile에서 workflow_dispatch 실행 가능([Changelog 2024-07-30](https://github.blog/changelog/2024-07-30-run-workflows-set-as-workflow_dispatch-manually), 입력 UI 세부 미확인) · 잡 최대 6시간([Docs](https://docs.github.com/en/actions/reference/actions-limits)).
 - 잡: checkout → Python → `screener validate` → `run` → `track` → `site` → `results/` 커밋·push(충돌 시 rebase 재시도) → Pages 배포(upload-pages-artifact + deploy-pages, `site/`만) → 실행 요약(단위 상태·비용 표·유효 기법 ID).
 - `permissions: {contents: write, pages: write, id-token: write}` · `concurrency: {group: screening, cancel-in-progress: false}` · `timeout-minutes`(Q10). 입력은 `env`로 넘겨 허용값(체크박스 true/false·선택지 목록)만 통과시키는 검증(스크립트 인젝션 방지). 비밀값은 실행 스텝 env에만: `ANTHROPIC_API_KEY`·`GEMINI_API_KEY`·`DART_API_KEY`·`KRX_ID`·`KRX_PW`. 저장소가 **공개**(GitHub API로 확인)라 Pages는 Free로 가능([GitHub 요금제](https://help.github.com/articles/github-s-products))하지만 결과 사이트·커밋된 결과·Actions 로그가 모두 공개 → 비밀값·계정 정보 로그 출력 금지.
@@ -231,7 +245,7 @@ on:
 - **계약 테스트**(`tests/contract/`, 레지스트리의 모든 기법에 파라미터화로 자동 적용): ① 모든 기법 — 매니페스트 스키마·카탈로그 ID·라벨 금지어, hold면 실행 거부 ② active 도구 — import 제한·스키마 이식성·결정성(같은 픽스처 2회 → 같은 해시)·NaN 없음(결측 = None + "미확인")·후보 도구 params 고정 ③ active e2e — 매니페스트에서 자동 생성한 "모범 mock 에이전트"(후보 도구 → 체크리스트 도구 → display 인용 제출)로 단위·픽 레코드 생성 ④ active 음성 — 후보 밖·중복·적격 4개·근거 없는 숫자·금지어·체크리스트 누락·level_ref 위조 → 전부 거부.
 - **코어 시나리오**(`tests/scenarios/*.yaml` 대본): 합의 일치 · 1라운드 해소 · 미해소 → 관찰/제외(AC18) · 라운드 0 제공자 실패 → 단위 실패 · 예산 중단/미실행(AC19) · 0후보 LLM 미호출(AC16) · 2건 정상(AC15) · 시장 데이터 실패 격리(AC13) · as_of(AC4).
 - **AC10 자동화**: `_template`를 `zz_dummy`로 복제·active → `screener sync-workflow` → 실행 폼에 `zz_dummy` 체크박스 생성·mock 실행·결과에 등장, 코어 diff 없음. CI는 레지스트리와 체크박스가 어긋나면 실패.
-- **범위 테스트**: 픽스처 범위(예: 가짜 kospi200 10종목)로 실행하면 후보 ⊆ 범위 스냅샷, 픽 행에 `universe_id` 기록, 허용 목록 밖 범위는 그 기법만 실패.
+- **범위 테스트**: 픽스처 범위 2개(가짜 kospi200 10종목 + 가짜 kosdaq150 8종목, 겹침 2종목)로 실행하면 후보 ⊆ 합집합(16종목, 중복 1번), 픽 행에 `universe_set`·`in_universes` 기록, 허용 목록 밖 범위는 그 기법에서 빠짐, 1순위 소스 실패 모킹 시 ETF 근사로 대체되고 "근사" 표시.
 - **유료 호출 0**: CI에 비밀값 없음 + `SCREENER_ALLOW_PAID_LLM` 미설정 시 실제 제공자 생성 거부 + 소켓 차단. mock은 설정한 가짜 usage를 보고 → 예산 로직도 CI에서 검증.
 
 ## 12. 새 기법 추가 절차
