@@ -6,18 +6,17 @@
 > ⚠️ 이 앱의 결과는 **스크리닝 결과(통계용)**이며 투자 권유나 매수·매도 추천이 아닙니다.
 
 ## 현재 상태
-**설계 단계 (PRD v0.2)** — 아직 실행 가능한 코드는 없습니다.
-요구사항은 [docs/prd/screening-v0.2.md](docs/prd/screening-v0.2.md)에 정리되어 있습니다.
+**설계 단계 (PRD v0.3)** — 아직 실행 가능한 코드는 없습니다.
+요구사항은 [docs/prd/screening-v0.3.md](docs/prd/screening-v0.3.md)에 정리되어 있습니다.
 
 ## 기능 (계획)
 | 기능 | 내용 |
 |---|---|
 | 기법별 스크리닝 | 기법마다 국장·미장 각각 최대 3종목 (적격 종목이 없으면 "현재 적격 종목 없음") |
 | LLM 수행 | LLM이 도구(데이터 조회·지표 계산·1차 필터)를 호출해 후보 축소 → 최대 3종목 선정 + 이유 기록. 숫자는 도구만 계산 |
-| 2단계 검수 | Claude가 1차 검수(판정) → Gemini가 같은 데이터로 2차 검수(승인 또는 하향) → 둘 다 적격인 종목만 적격 |
+| 판단 · 팩트체크 | Claude가 판단(판정·근거) → Gemini가 판정 근거의 사실 여부를 팩트체크(출처 포함) → 틀린 근거가 있으면 Claude가 그 근거를 빼고 다시 판단 |
 | 비용 상한 | 실행 1회 LLM 비용 상한 (첫 시험 실행으로 실측 후 확정) |
-| 요청 시 실행 | GitHub Actions의 **Run workflow** 버튼으로 실행 (휴대폰 브라우저·GitHub 앱 가능) |
-| 기법 선택 | 실행 화면에서 기법별 체크박스로 선택 (기법을 추가하면 체크박스 자동 생성) |
+| 요청 시 실행 | 기법·범위를 골라 요청할 때만 실행. 요청 방법은 검토 중(웹 실행 패널 / 이슈 폼 / Claude에게 말로 요청 / Streamlit) |
 | 범위 제한 | 기법별로 범위 지정, **여러 범위 동시 선택 가능**, 안 고르면 국장 전체·미장 전체 — 국장: 전체·코스피·코스닥·코스피200·코스피100·코스피50·코스닥150·KRX300 / 미장: 전체·나스닥·NYSE·S&P 500·S&P 100·나스닥100·다우30·필라델피아 반도체·러셀2000. 공식 구성종목을 못 받으면 ETF 보유 종목으로 근사("근사" 표시) |
 | 데이터 | 주식킹(stock-DASHBB)과 같은 네이버 증권 API를 국장·미장 1순위로 사용, 실패 시 대체 소스 |
 | 사후 수익률 | 기준가 = **추천 시점 직전 종가**, 추천일 ~ 현재 수익률을 모든 과거 선정 건에 대해 계산 |
@@ -29,32 +28,32 @@
 ## 스크리닝 기법
 | 기법 | 상태 | 명세 |
 |---|---|---|
-| 기술적 분석 | 진행 | [docs/strategies/technical.md](docs/strategies/technical.md) |
-| 워렌 버핏 (경제적 해자 중심) | 진행 | [docs/strategies/buffett-moat.md](docs/strategies/buffett-moat.md) |
-| 조지 소로스 (재귀성) | 보류 (명세 완료) | [docs/strategies/soros-reflexivity.md](docs/strategies/soros-reflexivity.md) |
-| 마크 미너비니 SEPA | 보류 (명세 완료) | [docs/strategies/minervini-sepa.md](docs/strategies/minervini-sepa.md) |
+| 마크 미너비니 SEPA | 확정 | [docs/strategies/minervini-sepa.md](docs/strategies/minervini-sepa.md) |
+| 볼린저밴드 기법 | 확정 | [docs/strategies/bollinger.md](docs/strategies/bollinger.md) |
+| 워렌 버핏 (경제적 해자 중심) | 확정 | [docs/strategies/buffett-moat.md](docs/strategies/buffett-moat.md) |
+| 조지 소로스 (재귀성) | 확정 | [docs/strategies/soros-reflexivity.md](docs/strategies/soros-reflexivity.md) |
 
 ## 동작 흐름 (계획)
 ```
-Run workflow (기법 선택)
+실행 요청 (기법·범위 선택)
   → 데이터 수집 (국장 / 미장)
-  → Claude·Gemini 각각: 도구 호출로 1차 필터 → 판정 (최대 3종목 + 이유)
-  → Gemini 2차 검수(승인·하향) → 하향 시 재검토 → 최종 결과
-  → 결과 기록 (선정일 · 직전 종가 · 기법 · 모델별 결과)
+  → Claude 판단: 도구 호출로 1차 필터 → 판정 (최대 3종목 + 근거 주장)
+  → Gemini 팩트체크: 사실 주장 확인 (확인·불일치·확인 불가 + 출처) → 불일치면 Claude 재판단
+  → 결과 기록 (선정일 · 직전 종가 · 기법 · 판단 · 팩트체크 결과)
   → 과거 선정 전체의 사후 수익률 재계산 → 결과/통계 화면
 ```
 
 ## 미정 사항
-아래 항목은 아직 결정되지 않았습니다. 전체 목록은 [PRD v0.2](docs/prd/screening-v0.2.md)의 **미결 질문** 참고.
+아래 항목은 아직 결정되지 않았습니다. 전체 목록은 [PRD v0.3](docs/prd/screening-v0.3.md)의 **미결 질문** 참고.
 - 모델 등급(Claude Opus/Sonnet, Gemini 모델명), 실행 1회 비용 최종 상한
 - 데이터 소스: 국장 다년 재무(DART Open API 검토 중), 미장(yfinance 검토 중)
-- 기술적 분석 지표, 결과 화면 호스팅 방식, 여러 범위 선택 시 뽑는 방식
+- 실행 요청 방법, 화면(프론트) 안, 볼린저밴드에서 쓸 방법, 여러 범위 선택 시 뽑는 방식
 
 ## 문서
 | 문서 | 내용 |
 |---|---|
-| [docs/prd/screening-v0.2.md](docs/prd/screening-v0.2.md) | 요구사항 · 합격 기준 · 미결 질문 |
-| [docs/architecture.md](docs/architecture.md) | 설계 — 기법 플러그인 · 도구 호출형 LLM · 2단계 검수 · 새 기법 추가 절차 |
+| [docs/prd/screening-v0.3.md](docs/prd/screening-v0.3.md) | 요구사항 · 합격 기준 · 미결 질문 |
+| [docs/architecture.md](docs/architecture.md) | 설계 — 기법 플러그인 · 도구 호출형 LLM · 판단·팩트체크 · 새 기법 추가 절차 |
 | [docs/strategies/](docs/strategies/) | 기법별 명세 |
 | [docs/backlog.md](docs/backlog.md) | 단계별 작업 목록 · 우선순위 |
 | [CLAUDE.md](CLAUDE.md) | 개발 규칙 |
