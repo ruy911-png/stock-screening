@@ -42,8 +42,8 @@ tools: {common: [get_fields, compute_indicator], own: [tech_candidates, tech_evi
 candidates_tool: tech_candidates   # 픽 ⊆ 이 도구가 반환한 종목
 params: {min_history: 120, rsi_max: 70, vol_ratio_min: 1.0, candidate_limit: 30}   # 제안값(Q2·Q4)
 universe:                          # 기법별 기본 범위(§6.2 프리셋 ID, 여러 개 가능). 실행 폼 범위 체크박스로 덮어쓸 수 있음
-  KR: {default: [kospi200], allowed: all}   # all = §6.2 프리셋 전부 허용, 또는 [kospi200, kosdaq150, …]
-  US: {default: [sp100],    allowed: all}   # 기본값은 제안(PRD Q34)
+  KR: {default: [kr_all], allowed: all}   # 기본 = 국장 전체(사용자 결정). all = §6.2 프리셋 전부 허용, 또는 [kospi200, kosdaq150, …]
+  US: {default: [us_all], allowed: all}   # 기본 = 미장 전체(사용자 결정, PRD Q34 해결)
   combine: union                   # union = 합집합에서 시장별 최대 3(제안) | per_universe = 범위마다 최대 3(비용 × 범위 수) — PRD Q37
 checklist:                         # 순서대로 저장. by=code는 도구 값이 판정, by=llm은 LLM 판정 + 근거
   - {id: trend,    by: code, from: tech_evidence.aligned}
@@ -145,6 +145,7 @@ def postprocess(draft: PickDraft, ev: Evidence, ctx: ToolContext) -> PickDraft: 
 | `nasdaq100` · `dow30` | 나스닥100 / 다우30 | 네이버 지수 구성(코드 미확인) | QQQ / DIA ETF 보유 종목 |
 | `sox` | 필라델피아 반도체 | 네이버 지수 구성(`.SOX`, 주식킹이 지수 시세 조회에 사용 중, 구성 응답 미검증) | SOXX ETF 보유 종목 |
 | `russell2000` | 러셀2000 | 무료 공식 소스 미확인 | IWM ETF 보유 종목 |
+- **기본 범위가 전체라서(사용자 결정)** 아무 범위도 안 고른 실행은 국장 전체·미장 전체를 쓴다 → 아래 "가벼운 값으로 먼저 줄이기"가 매 실행 적용되고, 데이터 수집 시간은 시험 실행에서 실측한다.
 - **거래소 전체 범위(`kr_all`·`kospi`·`kosdaq`·`us_all`·`nasdaq`·`nyse`):** 보통주만 쓴다(ETF·테스트 종목·워런트·우선주 등은 심볼 목록의 구분값과 이름으로 제외 — 구분 규칙은 구현 때 실제 파일로 확인). 종목 수가 수천 개라(정확한 수 미확인) 일봉 같은 무거운 데이터는 가벼운 값(시가총액·거래대금)으로 먼저 줄인 뒤에만 조회한다 — 기법 1차 필터의 유동성 하한을 먼저 적용. LLM 비용은 후보 상한 N이 있어 범위 크기와 무관하지만, 데이터 수집 시간·요청 수는 늘어난다.
 - **소스 출처:** pykrx 지수 코드 `1028`·`1034`·`1035`는 [pykrx README](https://github.com/sharebook-kr/pykrx), `2203`은 [WikiDocs](https://wikidocs.net/226894)(2차 출처). 나스닥 심볼 목록은 [Nasdaq Trader](https://nasdaqtrader.com/) 공개 파일.
 - **기록:** 실행마다 범위별 스냅샷(`universe_id`·출처·근사 여부·기준일·종목 수·해시)을 단위 레코드에 저장한다. 픽 행에는 `universe_set`(그 단위에 쓴 범위 집합, 예: `kospi200+kosdaq150`)과 `in_universes`(그 종목이 속한 범위들)를 넣는다 → 통계를 범위 집합별·범위별로 나눠 볼 수 있다. 근사 소스를 쓴 범위는 결과 화면에 "근사"로 표시한다.
