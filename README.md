@@ -14,7 +14,7 @@
 |---|---|
 | 기법별 스크리닝 | 기법마다 국장·미장 각각 최대 3종목 (적격 종목이 없으면 "현재 적격 종목 없음") |
 | LLM 수행 | LLM이 도구(데이터 조회·지표 계산·1차 필터)를 호출해 후보 축소 → 최대 3종목 선정 + 이유 기록. 숫자는 도구만 계산 |
-| 멀티모델 합의 | Claude·Gemini가 각각 실행 → 둘 다 적격인 종목만 적격, 불일치 시 상호 재검토 |
+| 2단계 검수 | Claude가 1차 검수(판정) → Gemini가 같은 데이터로 2차 검수(승인 또는 하향) → 둘 다 적격인 종목만 적격 |
 | 비용 상한 | 실행 1회 LLM 비용 상한 (첫 시험 실행으로 실측 후 확정) |
 | 요청 시 실행 | GitHub Actions의 **Run workflow** 버튼으로 실행 (휴대폰 브라우저·GitHub 앱 가능) |
 | 기법 선택 | 실행 화면에서 기법별 체크박스로 선택 (기법을 추가하면 체크박스 자동 생성) |
@@ -39,7 +39,7 @@
 Run workflow (기법 선택)
   → 데이터 수집 (국장 / 미장)
   → Claude·Gemini 각각: 도구 호출로 1차 필터 → 판정 (최대 3종목 + 이유)
-  → 불일치 시 상호 재검토 → 합의 결과
+  → Gemini 2차 검수(승인·하향) → 하향 시 재검토 → 최종 결과
   → 결과 기록 (선정일 · 직전 종가 · 기법 · 모델별 결과)
   → 과거 선정 전체의 사후 수익률 재계산 → 결과/통계 화면
 ```
@@ -54,7 +54,7 @@ Run workflow (기법 선택)
 | 문서 | 내용 |
 |---|---|
 | [docs/prd/screening-v0.2.md](docs/prd/screening-v0.2.md) | 요구사항 · 합격 기준 · 미결 질문 |
-| [docs/architecture.md](docs/architecture.md) | 설계 — 기법 플러그인 · 도구 호출형 LLM · 멀티모델 합의 · 새 기법 추가 절차 |
+| [docs/architecture.md](docs/architecture.md) | 설계 — 기법 플러그인 · 도구 호출형 LLM · 2단계 검수 · 새 기법 추가 절차 |
 | [docs/strategies/](docs/strategies/) | 기법별 명세 |
 | [docs/backlog.md](docs/backlog.md) | 단계별 작업 목록 · 우선순위 |
 | [CLAUDE.md](CLAUDE.md) | 개발 규칙 |
