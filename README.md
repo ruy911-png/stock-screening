@@ -21,6 +21,7 @@
 | 데이터 | 주식킹(stock-DASHBB)과 같은 네이버 증권 API를 국장·미장 1순위로 사용, 실패 시 대체 소스 |
 | 사후 수익률 | 기준가 = **추천 시점 직전 종가**, 추천일 ~ 현재 수익률을 모든 과거 선정 건에 대해 계산 |
 | 기법별 통계 | 기법별 선정 수 · 평균/중앙값 수익률 · 상승 비율 |
+| 종목 상세 | 선정 후 성과(주가 흐름·수익률·같은 기간 지수 대비) + 기업 실적(분기·연간) + 판단 근거 — '실적' 의미는 확인 중 |
 | 기법 추가 | `strategies/<기법>/` 폴더 추가만으로 새 기법 등록 (플러그인 구조) |
 
 화면은 최소한으로 두고 기능을 우선합니다.
@@ -29,7 +30,7 @@
 | 기법 | 상태 | 명세 |
 |---|---|---|
 | 마크 미너비니 SEPA | 확정 | [docs/strategies/minervini-sepa.md](docs/strategies/minervini-sepa.md) |
-| 볼린저밴드 기법 | 확정 | [docs/strategies/bollinger.md](docs/strategies/bollinger.md) |
+| 볼린저밴드 기법 | 보류 (명세 초안만 유지) | [docs/strategies/bollinger.md](docs/strategies/bollinger.md) |
 | 워렌 버핏 (경제적 해자 중심) | 확정 | [docs/strategies/buffett-moat.md](docs/strategies/buffett-moat.md) |
 | 조지 소로스 (재귀성) | 확정 | [docs/strategies/soros-reflexivity.md](docs/strategies/soros-reflexivity.md) |
 
@@ -47,7 +48,8 @@
 아래 항목은 아직 결정되지 않았습니다. 전체 목록은 [PRD v0.3](docs/prd/screening-v0.3.md)의 **미결 질문** 참고.
 - 모델 등급(Claude Opus/Sonnet, Gemini 모델명), 실행 1회 비용 최종 상한
 - 데이터 소스: 국장 다년 재무(DART Open API 검토 중), 미장(yfinance 검토 중)
-- 실행 요청 방법, 화면(프론트) 안, 볼린저밴드에서 쓸 방법, 여러 범위 선택 시 뽑는 방식
+- 실행 요청 방법, 화면(프론트) 안, 여러 범위 선택 시 뽑는 방식
+- 종목 상세의 '실적' 의미(가정: 선정 후 성과 + 기업 실적), 비교 지수, 기업 실적 데이터 소스
 
 ## 문서
 | 문서 | 내용 |

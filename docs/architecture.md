@@ -22,7 +22,7 @@ stock-screening/
 │   ├── llm/       base.py · loop.py · schema.py · validate.py · budget.py · prompts/common.md · providers/{anthropic,gemini,mock}.py
 │   ├── ledger/    writer.py · returns.py · stats.py
 │   └── site/      render.py · templates/
-├── strategies/  _template/(복제용) · minervini_sepa/ · bollinger/ · buffett_moat/ · soros_reflexivity/ (4개 모두 active) · strategies.lock
+├── strategies/  _template/(복제용) · minervini_sepa/ · buffett_moat/ · soros_reflexivity/ (active) · bollinger/ (hold — 2026-10-04 보류) · strategies.lock
 │   └── <id>/    strategy.yaml(필수) · tools.py · prompt.md(active 필수) · postprocess.py · tracking.py(선택) · tests/
 ├── results/     runs/<run_id>/ · picks/ · events/ · derived/(매 실행 재생성)
 ├── tests/       unit/ · contract/ · scenarios/(mock 대본)
@@ -30,13 +30,13 @@ stock-screening/
 ```
 
 ## 3. 기법 플러그인 규격
-**매니페스트 `strategy.yaml` 예(bollinger)** — 수치는 모두 제안값(명세 docs/strategies/bollinger.md).
+**매니페스트 `strategy.yaml` 예(bollinger — 현재 보류라 markets가 hold)** — 수치는 모두 제안값(명세 docs/strategies/bollinger.md).
 ```yaml
 id: bollinger                      # = 폴더명, ^[a-z][a-z0-9_]{1,31}$
 name: 볼린저밴드
 version: 1.0.0                     # 판정 기준 변경 시 올림(CI가 lock으로 강제) → 통계 분리
 spec: docs/strategies/bollinger.md
-markets: {KR: active, US: active}  # 시장별 active | hold
+markets: {KR: hold, US: hold}      # 시장별 active | hold (보류 = 실행 거부)
 data: {required: [ohlcv_daily, traded_value_20d], optional: [sector]}    # 필드 카탈로그 ID만
 tools: {common: [get_fields, compute_indicator], own: [bb_candidates, bb_evidence]}
 candidates_tool: bb_candidates     # 픽 ⊆ 이 도구가 반환한 종목
@@ -226,14 +226,14 @@ class LLMProvider(Protocol):
 on:
   workflow_dispatch:            # 유일한 트리거(AC1). 웹 실행 패널·Claude 요청은 REST API로 이 이벤트를 만든다
     inputs:
-      request: {type: string, required: true, description: '{"strategies":["minervini_sepa","bollinger"],"ranges":["kr_all","us_all"],"markets":"all","mode":"screen","dry_run":false}'}
+      request: {type: string, required: true, description: '{"strategies":["minervini_sepa","buffett_moat"],"ranges":["kr_all","us_all"],"markets":"all","mode":"screen","dry_run":false}'}
 ```
 
 | 실행 요청 방법(Q40) | 선택 화면 | 필요한 것 | 주의 |
 |---|---|---|---|
 | a. 결과 웹페이지의 실행 패널 | 기법·범위를 다중 선택 칩으로, 선택지는 `registry.json`(사이트와 함께 배포)에서 자동 생성 | Actions 쓰기 권한만 준 fine-grained 토큰을 사용자 휴대폰 브라우저에 1번 저장 → REST `POST /repos/{owner}/{repo}/actions/workflows/{id}/dispatches` | 토큰이 그 브라우저에 남음(저장소 1개·Actions 쓰기로 범위 제한) |
 | b. 이슈 폼 | 다중 선택 드롭다운(`multiple: true`) | 토큰 불필요. 이슈가 열리면 워크플로 실행, 결과는 이슈 댓글 | 선택지는 폼 파일에 고정(기법 추가 시 생성기로 갱신). GitHub 모바일 앱은 이슈 폼을 브라우저로 넘기고 일부 기능이 안 된다는 보고. 공개 저장소라 소유자가 연 이슈만 실행 |
-| c. Claude에게 말로 요청 | 대화("SEPA랑 볼린저, 국장 전체로") | Claude 세션 + 이 저장소 권한 → Claude가 같은 REST 호출 | 실행할 때마다 Claude 대화 필요 |
+| c. Claude에게 말로 요청 | 대화("SEPA랑 버핏, 국장 전체로") | Claude 세션 + 이 저장소 권한 → Claude가 같은 REST 호출 | 실행할 때마다 Claude 대화 필요 |
 | d. Streamlit 앱 | 다중 선택 위젯 | 별도 서버(무료 판은 미사용 시 잠듦) | 지금 구조(Actions·Pages)와 달라 재설계 필요, 전체 범위 같은 긴 실행에 불리 |
 - 확인한 사실: REST 실행 이벤트 생성 엔드포인트와 fine-grained 토큰의 "Actions: write" 권한 요구([GitHub Docs](https://docs.github.com/en/rest/actions/workflows)) · 이슈 폼 드롭다운 `multiple: true`([GitHub Docs](https://docs.github.com/en/communities/using-templates-to-encourage-useful-issues-and-pull-requests/syntax-for-githubs-form-schema)) · 모바일 앱의 이슈 폼 제약 보고([Community #50983](https://github.com/orgs/community/discussions/50983)) · 잡 최대 6시간([Docs](https://docs.github.com/en/actions/reference/actions-limits)).
 - 잡: checkout → Python → `screener validate` → `run` → `track` → `site` → `results/` 커밋·push(충돌 시 rebase 재시도) → Pages 배포(upload-pages-artifact + deploy-pages, `site/`만) → 실행 요약(단위 상태·비용 표·유효 기법 ID).
@@ -269,11 +269,11 @@ on:
 | 8 | 파이프라인·원장·실패 격리·계약 테스트 하네스 | `pipeline.py`, `ledger/writer.py`, `tests/contract/` | mock e2e, AC2·AC3·AC6·AC10·AC11·AC13·AC16·AC17 | 3, 7 |
 | 9 | 실데이터 어댑터: **네이버 증권(주식킹 방식, 1순위)**·pykrx·DART·yfinance, 범위 구성종목 소스, 스로틀·ttl 캐시 | `data/adapters/*`, `data/universes.py` | 녹화 픽스처 테스트(CI 무네트워크) + Actions 스모크로 네이버 엔드포인트·범위 구성(코스피200·S&P 100) 실제 응답 확인 | 3 |
 | 10 | 실제 제공자(Anthropic·Gemini) | `providers/{anthropic,gemini}.py` | SDK 모킹 테스트, 수동 스모크(같은 도구 스키마로 양쪽 성공) | 5 |
-| 11 | 기법 4개: minervini_sepa · bollinger · buffett_moat · soros_reflexivity | `strategies/*/` | 계약 테스트 자동 통과, 골든 후보 일치. SEPA·소로스는 PRD Q19~Q28 결정 후 | 4, 8(버핏·SEPA·소로스는 9의 재무·분기 필드) |
+| 11 | 기법 3개: minervini_sepa · buffett_moat · soros_reflexivity (bollinger는 보류 — 명세만 유지) | `strategies/*/` | 계약 테스트 자동 통과, 골든 후보 일치. SEPA·소로스는 PRD Q19~Q28 결정 후 | 4, 8(버핏·SEPA·소로스는 9의 재무·분기 필드) |
 | 12 | 추적·통계(판단·최종·팩트체크로 낮아진 종목 비교·불일치율·비용 누적) | `ledger/{returns,stats}.py` | AC7·AC8, 다중 기준가·pending | 8 |
 | 13 | 정적 사이트 | `site/*` | AC9·AC14, 단위 상태 문구 표시 | 12 |
 | 14 | 워크플로 2종 · 실행 요청 JSON 검증 · 선택한 실행 요청 방법(Q40) 구현 · 시크릿 스캔 | `.github/workflows/*`, 요청 화면 | AC1·AC10·AC12·AC22, 휴대폰에서 dry_run 요청 성공 | 8, 12, 13 |
-| 15 | **시험 실행으로 비용 실측 → 상한 확정** | `config/settings.yaml`(budget) | 임시 $2로 1단위(예: bollinger×KR)부터 실행 → 비용 리포트 검토 → 사용자 최종 상한 반영(Q31), 입력 추정 보정 | 9, 10, 11, 14 |
+| 15 | **시험 실행으로 비용 실측 → 상한 확정** | `config/settings.yaml`(budget) | 임시 $2로 1단위(예: minervini_sepa×KR)부터 실행 → 비용 리포트 검토 → 사용자 최종 상한 반영(Q31), 입력 추정 보정 | 9, 10, 11, 14 |
 - 병렬: {2, 3, 4, 6} → {5, 9} → {7, 10} → 8 → {11, 12} → 13 → 14 → 15 (9는 8까지 병렬 진행 가능).
 
 ## 14. 리스크 · 미결 질문
