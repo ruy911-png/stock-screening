@@ -2,7 +2,7 @@
 
 - 신호 기간: 2016-01-01 ~ 2026-09-03 (마지막 일봉 2026-10-02)
 - 유니버스: S&P 500 현재 구성종목 중 금융 제외 427종목 (일봉 못 받음 0: 없음)
-- **버핏 필터 미실행** — SEC가 접근을 막음 — SEC 403 (CIK 66740, User-Agent 'stock-screening backtest research github.com/ruy911-png/stock-screening'): <!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd". 아래는 볼린저 단독 결과만
+- **버핏 필터 미실행** — SEC가 접근을 막음 — SEC 403 (CIK 66740, User-Agent 연락처 없음): <!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd". 아래는 볼린저 단독 결과만
 - 수익률: 신호일 종가 → 5·10·20거래일 뒤 종가 (분할 보정, 배당 미포함). 같은 종목·전략은 신호 뒤 20거래일 동안 새 신호 안 셈
 - 볼린저: I 변동성 돌파 · II 추세 추종(%b>0.8·MFI(10)>80) · III 반전(W-bottom 단순화) · I+II(Q41 기본안, 참고)
 - 매수·매도 권유가 아니다. 임시값·한계는 README.md
@@ -57,4 +57,4 @@
 | 2025 | +1.1% (510) | +1.1% (1372) | +0.2% (630) | +0.5% (224) |
 | 2026 | +0.8% (231) | +1.8% (927) | +1.7% (435) | +1.6% (100) |
 
-- 실행 시간 59초
+- 실행 시간 66초
