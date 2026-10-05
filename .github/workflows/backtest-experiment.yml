@@ -56,8 +56,19 @@ jobs:
       - name: 결과 커밋
         if: always()
         run: |
+          # 결과 파일은 매번 통째로 다시 만들므로, 최신 브랜치 위에 이번 결과를 덮어써서 올린다(충돌·실패를 숨기지 않음)
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add results
-          git diff --cached --quiet || git commit -m "시험 결과 갱신 (backtest-experiment)"
-          for i in 1 2 3; do git pull --rebase origin "${GITHUB_REF_NAME}" && git push origin "HEAD:${GITHUB_REF_NAME}" && break; sleep 5; done
+          tmp="$(mktemp -d)"
+          cp -r results "$tmp/"
+          for i in 1 2 3; do
+            git fetch -q origin "${GITHUB_REF_NAME}"
+            git reset -q --hard "origin/${GITHUB_REF_NAME}"
+            rm -rf results && cp -r "$tmp/results" results
+            git add -A results
+            if git diff --cached --quiet; then echo "변경 없음"; exit 0; fi
+            git commit -q -m "시험 결과 갱신 (backtest-experiment)"
+            if git push -q origin "HEAD:${GITHUB_REF_NAME}"; then echo "결과 푸시 완료"; exit 0; fi
+            sleep 5
+          done
+          echo "결과 푸시 실패"; exit 1
