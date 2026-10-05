@@ -25,6 +25,8 @@ from bt.data import download_prices, load_universe  # noqa: E402
 MIN_POSTS = 3
 SPIKE = 3.0
 BENCH = "SPY"
+# 종목 인식 오류로 확인된 티커(2026-10-05): DTE = Days To Expiration, PSA = 공지. 이미 모은 집계에서 통째로 뺀다
+EXCLUDE_TICKERS = {"DTE", "PSA"}
 
 
 def pct(x, digits=2, sign=True):
@@ -81,6 +83,7 @@ def main() -> int:
     out.mkdir(parents=True, exist_ok=True)
 
     td, cov = load(Path(args.data))
+    td = td[~td["ticker"].isin(EXCLUDE_TICKERS)]
     sig = make_signals(td)
     uni = load_universe(cache)
     tickers = sorted({s.replace(".", "-") for s in uni.index})
@@ -139,7 +142,7 @@ def main() -> int:
         "# 레딧(WSB) 반응 긍정 백테스트 — 스크리닝 결과(통계용)",
         "",
         f"- 레딧 데이터: Arctic Shift 아카이브의 r/wallstreetbets 게시물 제목, {cov['date'].min():%Y-%m-%d} ~ {cov['date'].max():%Y-%m-%d}",
-        f"- 종목: S&P 500 현재 구성종목(캐시태그 또는 대문자 티커). 일봉 못 받음 {len(failed)}",
+        f"- 종목: S&P 500 현재 구성종목(캐시태그 또는 대문자 티커). 인식 오류로 뺀 티커: {', '.join(sorted(EXCLUDE_TICKERS))}. 일봉 못 받음 {len(failed)}",
         f"- 신호: 하루 언급 글 {MIN_POSTS}개 이상 + VADER(WSB 은어 추가) 평균 감성으로 긍정/부정, 긍정+급증 = 직전 30일 평균의 {SPIKE:.0f}배 이상",
         "- 기준가: 신호 날짜(UTC) 다음 거래일 종가 → 5·10·20거래일 뒤 종가(분할 보정, 배당 미포함). 같은 종목·전략 20거래일 쿨다운",
         f"- 집계 기간: {start:%Y-%m-%d} ~ {last_entry:%Y-%m-%d}. 매수·매도 권유가 아니다. 임시값·한계는 README.md",

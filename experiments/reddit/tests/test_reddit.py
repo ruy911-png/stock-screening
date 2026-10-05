@@ -70,3 +70,9 @@ def test_fetch_day_paginates_and_reports_failure(monkeypatch):
     assert complete and len(posts) == 170
     posts, complete = collect.fetch_day(_Sess([_Resp(422, headers={"X-RateLimit-Reset": "1"})] * 5), day)
     assert posts is None and not complete
+
+
+def test_options_jargon_is_not_a_ticker():
+    uni = {"DTE", "PSA", "NVDA"}
+    assert extract_tickers("PSA: 0 DTE NVDA calls", uni) == {"NVDA"}
+    assert extract_tickers("$DTE earnings", uni) == {"DTE"}

@@ -1,10 +1,8 @@
 # 시험용: 레딧(WSB) 반응 긍정 백테스트 (사용자 요청 2026-10-05)
 # 연도별로 Arctic Shift에서 게시물 제목을 받아 숫자로만 집계(원문 저장 안 함) → 합쳐서 백테스트 → 결과 커밋
 name: reddit-experiment
+# 수집은 2시간 넘게 걸려 코드 푸시로 자동 실행하지 않는다(수동 실행만). 분석만 다시 할 때는 reddit-analyze
 on:
-  push:
-    branches: [test/backtest-sepa-buffett-bb]
-    paths: ["experiments/reddit/**", "!experiments/reddit/results/**", ".github/workflows/reddit-experiment.yml"]
   workflow_dispatch:
 permissions:
   contents: write

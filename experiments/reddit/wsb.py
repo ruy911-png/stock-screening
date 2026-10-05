@@ -24,6 +24,7 @@ COMMON_WORDS = {
     "ALL", "ARE", "CAT", "DAY", "KEY", "LOW", "NOW", "HAS", "ICE", "MET", "PEG", "POOL", "COST", "FAST",
     "TECH", "WELL", "TAP", "YUM", "WAT", "LUV", "DOC", "DOW", "UPS", "USB", "GEN", "BALL", "TRUE",
     "PLAY", "NEXT", "LIFE", "CASH", "BEST", "GOOD", "HOLD", "MAIN", "SAFE", "REAL", "OPEN", "POST",
+    "DTE", "PSA",  # 2026-10-05 결과에서 발견: Days To Expiration(옵션 만기), PSA(공지)로 흔히 씀
 }
 _CASHTAG = re.compile(r"\$([A-Za-z]{1,5}(?:\.[A-Za-z])?)\b")
 _UPPER = re.compile(r"(?<![A-Za-z$])([A-Z]{3,5})(?![A-Za-z])")

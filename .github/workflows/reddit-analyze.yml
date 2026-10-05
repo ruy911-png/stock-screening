@@ -4,7 +4,7 @@ name: reddit-analyze
 on:
   push:
     branches: [test/backtest-sepa-buffett-bb]
-    paths: [".github/workflows/reddit-analyze.yml"]
+    paths: ["experiments/reddit/**", "!experiments/reddit/results/**", ".github/workflows/reddit-analyze.yml"]
   workflow_dispatch:
 permissions:
   contents: write
