@@ -1,0 +1,233 @@
+[
+ {
+  "market": "미장",
+  "source": "StockAnalysis.com (ANET)",
+  "purpose": "일봉 OHLC·거래량",
+  "url": "https://stockanalysis.com/stocks/anet/history/",
+  "robots": "허용",
+  "status": "200",
+  "data": "종가 표 50행, 최근 2026-10-02",
+  "verdict": "기술적으로 됨",
+  "note": "약관: 자동 수집·대량 다운로드 금지(robots.txt 따르는 크롤러 예외) — 검색 요약"
+ },
+ {
+  "market": "미장",
+  "source": "TrendScreeners.com",
+  "purpose": "Trend Template·RS 계산값",
+  "url": "https://trendscreeners.com/",
+  "robots": "허용",
+  "status": "200",
+  "data": "페이지 제목: 트렌드 스크리너 — 미국·국내 주식 조건 검색기 · 업종 랭킹 · 시장 환경",
+  "verdict": "접속됨",
+  "note": ""
+ },
+ {
+  "market": "미장",
+  "source": "Arista IR",
+  "purpose": "실적·가이던스",
+  "url": "https://investors.arista.com/",
+  "robots": "허용",
+  "status": "200",
+  "data": "제목: Arista Networks - Home · PDF 링크 8개 · '실적' 단어 8회",
+  "verdict": "접속됨 — 숫자는 보도자료(HTML/PDF), 회사마다 형식 다름",
+  "note": ""
+ },
+ {
+  "market": "미장",
+  "source": "Amphenol IR",
+  "purpose": "실적·가이던스",
+  "url": "https://investors.amphenol.com/",
+  "robots": "허용",
+  "status": "200",
+  "data": "제목: Amphenol Corporation - Investor Relations · PDF 링크 10개 · '실적' 단어 16회",
+  "verdict": "접속됨 — 숫자는 보도자료(HTML/PDF), 회사마다 형식 다름",
+  "note": ""
+ },
+ {
+  "market": "미장",
+  "source": "TSMC IR",
+  "purpose": "실적·가이던스",
+  "url": "https://investor.tsmc.com/english/quarterly-results",
+  "robots": "허용",
+  "status": "200",
+  "data": "제목: TSMC 2026 Q3 Quarterly Results - Taiwan Semiconductor Manufa · PDF 링크 2개 · '실적' 단어 242회",
+  "verdict": "접속됨 — 숫자는 보도자료(HTML/PDF), 회사마다 형식 다름",
+  "note": ""
+ },
+ {
+  "market": "미장",
+  "source": "SEC 티커→CIK 표",
+  "purpose": "CIK 조회",
+  "url": "https://www.sec.gov/files/company_tickers.json",
+  "robots": "-",
+  "status": "HTTPError",
+  "data": "-",
+  "verdict": "안 됨",
+  "note": ""
+ },
+ {
+  "market": "미장",
+  "source": "SEC EDGAR (ANET)",
+  "purpose": "공시 재무(분기·연간)",
+  "url": "https://data.sec.gov/api/xbrl/companyfacts/CIK0000000000.json",
+  "robots": "-",
+  "status": "-",
+  "data": "-",
+  "verdict": "안 됨 — 티커→CIK 못 찾음",
+  "note": ""
+ },
+ {
+  "market": "미장",
+  "source": "SEC EDGAR (APH)",
+  "purpose": "공시 재무(분기·연간)",
+  "url": "https://data.sec.gov/api/xbrl/companyfacts/CIK0000000000.json",
+  "robots": "-",
+  "status": "-",
+  "data": "-",
+  "verdict": "안 됨 — 티커→CIK 못 찾음",
+  "note": ""
+ },
+ {
+  "market": "미장",
+  "source": "SEC EDGAR (TSM)",
+  "purpose": "공시 재무(분기·연간)",
+  "url": "https://data.sec.gov/api/xbrl/companyfacts/CIK0000000000.json",
+  "robots": "-",
+  "status": "-",
+  "data": "-",
+  "verdict": "안 됨 — 티커→CIK 못 찾음",
+  "note": ""
+ },
+ {
+  "market": "미장",
+  "source": "야후 yfinance (ANET) — 참고",
+  "purpose": "일봉(현재 시험 코드 원천)",
+  "url": "query1/2.finance.yahoo.com",
+  "robots": "-",
+  "status": "200",
+  "data": "44일, 최근 2026-10-02",
+  "verdict": "됨",
+  "note": ""
+ },
+ {
+  "market": "국장",
+  "source": "Investing.com (www, 삼성전자)",
+  "purpose": "일봉",
+  "url": "https://www.investing.com/equities/samsung-electronics-co-ltd-historical-data",
+  "robots": "허용",
+  "status": "403",
+  "data": "Just a moment...",
+  "verdict": "안 됨 — HTTP 403",
+  "note": ""
+ },
+ {
+  "market": "국장",
+  "source": "Investing.com (kr, 삼성전자)",
+  "purpose": "일봉",
+  "url": "https://kr.investing.com/equities/samsung-electronics-co-ltd-historical-data",
+  "robots": "허용",
+  "status": "403",
+  "data": "Just a moment...",
+  "verdict": "안 됨 — HTTP 403",
+  "note": ""
+ },
+ {
+  "market": "국장",
+  "source": "한국경제 Markets",
+  "purpose": "시세",
+  "url": "https://markets.hankyung.com/",
+  "robots": "허용",
+  "status": "200",
+  "data": "페이지 제목: 시장종합 | 한국경제",
+  "verdict": "접속됨",
+  "note": ""
+ },
+ {
+  "market": "국장",
+  "source": "한국경제 Markets 종목 페이지",
+  "purpose": "일봉",
+  "url": "https://markets.hankyung.com/stock/005930/total",
+  "robots": "허용",
+  "status": "404",
+  "data": "This page could not be found",
+  "verdict": "안 됨 — HTTP 404",
+  "note": "종목 페이지 주소는 추정"
+ },
+ {
+  "market": "국장",
+  "source": "DART OpenAPI",
+  "purpose": "공시 재무·기업정보",
+  "url": "https://opendart.fss.or.kr/api/company.json?corp_code=00126380&crtfc_key=(키 없음)",
+  "robots": "-",
+  "status": "200",
+  "data": "status 010 · 등록되지 않은 인증키입니다.",
+  "verdict": "키 필요 — 인증키 발급 후 사용",
+  "note": ""
+ },
+ {
+  "market": "국장",
+  "source": "KRX Open API",
+  "purpose": "유가증권 일별매매정보",
+  "url": "https://data-dbg.krx.co.kr/svc/apis/sto/stk_bydd_trd?basDd=20261002",
+  "robots": "-",
+  "status": "401",
+  "data": "{\"respMsg\":\"Unauthorized Key\",\"respCode\":\"401\"}",
+  "verdict": "키 필요 — 인증키 발급·서비스 신청 후 사용",
+  "note": "키 승인 약 1영업일(검색 결과)"
+ },
+ {
+  "market": "국장",
+  "source": "KRX 정보데이터시스템 via pykrx (005930)",
+  "purpose": "일봉 OHLCV",
+  "url": "data.krx.co.kr",
+  "robots": "-",
+  "status": "200",
+  "data": "29일, 최근 2026-10-02",
+  "verdict": "됨",
+  "note": "pykrx README: 일부 기능 KRX 로그인 필요"
+ },
+ {
+  "market": "국장",
+  "source": "KIND",
+  "purpose": "시장경보 공시",
+  "url": "https://kind.krx.co.kr/",
+  "robots": "허용(robots.txt 없음 404)",
+  "status": "200",
+  "data": "페이지 제목: ëíë¯¼êµ­ ëí ê¸°ì ê³µìì±ë KIND",
+  "verdict": "접속됨",
+  "note": ""
+ },
+ {
+  "market": "국장",
+  "source": "KRX 시장감시위원회",
+  "purpose": "시장경보 조회",
+  "url": "https://surveillance.krx.co.kr/",
+  "robots": "허용(robots.txt 없음 404)",
+  "status": "200",
+  "data": "페이지 제목: Surveillance",
+  "verdict": "접속됨",
+  "note": ""
+ },
+ {
+  "market": "국장",
+  "source": "연합뉴스",
+  "purpose": "보조 실적·뉴스",
+  "url": "https://www.yna.co.kr/",
+  "robots": "허용",
+  "status": "200",
+  "data": "페이지 제목: 연합뉴스",
+  "verdict": "접속됨",
+  "note": "앱은 직접 수집 대신 팩트체크 검색으로 사용 예정"
+ },
+ {
+  "market": "국장",
+  "source": "네이버 모바일 (005930) — 참고(주식킹 방식)",
+  "purpose": "일봉 종가",
+  "url": "https://m.stock.naver.com/api/stock/005930/price?pageSize=30&page=1",
+  "robots": "막힘",
+  "status": "-",
+  "data": "-",
+  "verdict": "안 됨 — robots.txt가 막음(요청 안 함)",
+  "note": "비공식 API"
+ }
+]
