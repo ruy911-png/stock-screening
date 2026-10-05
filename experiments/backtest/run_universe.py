@@ -34,6 +34,7 @@ from bt.universe import ENV_NAME, TOP_N, build, parse_spec, ticker_cik_map  # no
 SAME_AS = {"RSI<30 첫날": "RSI<30", "BB I 돌파": "BB-I"}
 SP500_FILES = ["backtest", "oscillators", "oversold", "bb_rsi", "ma_cross"]
 ALL, TOP = "전체", f"시총 상위 {TOP_N}"
+MIN_PRICE = 5.0  # 신호일 실제 거래가격 하한 — 지금은 대형주지만 과거 동전주였던 구간의 극단 수익률을 뺀다
 MIN_N = {ALL: 100, TOP: 30}  # 순위표에 올리는 최소 건수(시총 상위 묶음은 종목이 적어 낮춤)
 
 
@@ -47,22 +48,37 @@ def all_signals(df: pd.DataFrame, market_up: pd.Series) -> pd.DataFrame:
     return out.drop(columns=[c for c in SAME_AS if c in out.columns])
 
 
+def as_traded(closes: pd.DataFrame, splits: pd.DataFrame) -> pd.DataFrame:
+    """분할 보정 종가 → 그날 실제 거래가격(그 뒤 분할 배수를 되돌림). 나중에 액면분할한 종목이 과거에 싸 보이지 않게."""
+    ratio = splits.reindex_like(closes).fillna(0.0)
+    cum = ratio.where(ratio > 0, 1.0).cumprod()
+    return closes * (cum.iloc[-1] / cum)
+
+
+def gap_ahead(close_cal: pd.Series, h: int) -> pd.Series:
+    """시장 거래일 기준으로 t 다음 h거래일 안에 이 종목 거래 기록이 빠진 날이 있으면 True(수익률을 제대로 잴 수 없음)."""
+    miss = close_cal.isna().astype(float)
+    ahead = miss[::-1].rolling(h, min_periods=h).max()[::-1].shift(-1)
+    return ahead.fillna(1.0).astype(bool)  # 데이터 끝을 넘는 구간도 잴 수 없음
+
+
 def baseline_of(strategy: str) -> str:
     """비교할 기준선: 버핏이 붙으면 버핏 통과 종목, 시장 상승 조건이 붙으면 시장 상승일끼리."""
     who = "버핏 통과 종목" if strategy.startswith("버핏+") else "유니버스"
     return f"기준선: {who} {'시장 상승일' if '시장 상승' in strategy else '아무 날'}"
 
 
-def subset_stats(mk, symbols: list[str], mask, market_up: pd.Series, ev: pd.DataFrame, order: list[str],
-                 start: pd.Timestamp, last_entry: pd.Timestamp) -> pd.DataFrame:
-    """종목 묶음 하나의 전략별 통계 + 기준선(유니버스·버핏 × 아무 날·시장 상승일, SPY)."""
+def subset_stats(mk, symbols: list[str], mask, market_up: pd.Series, valid: pd.DataFrame, ev: pd.DataFrame,
+                 order: list[str], start: pd.Timestamp, last_entry: pd.Timestamp) -> pd.DataFrame:
+    """종목 묶음 하나의 전략별 통계 + 기준선(유니버스·버핏 × 아무 날·시장 상승일, SPY). 기준선도 투자 가능한 날(valid)만."""
     stats = btk.stats_table(ev[ev["ticker"].isin(symbols)], order)
     closes = mk.closes[symbols]
+    ok = valid[symbols]
     up = pd.DataFrame({s: market_up for s in symbols}, index=closes.index)
-    bases = [("기준선: 유니버스 아무 날", None), ("기준선: 유니버스 시장 상승일", up)]
+    bases = [("기준선: 유니버스 아무 날", ok), ("기준선: 유니버스 시장 상승일", ok & up)]
     if mask is not None:
-        bm = mask[symbols]
-        bases += [("기준선: 버핏 통과 종목 아무 날", bm), ("기준선: 버핏 통과 종목 시장 상승일", bm & up)]
+        bm = mask[symbols].reindex(closes.index, fill_value=False)
+        bases += [("기준선: 버핏 통과 종목 아무 날", ok & bm), ("기준선: 버핏 통과 종목 시장 상승일", ok & bm & up)]
     rows = []
     for name, m in bases:
         allday = btk.all_day_returns(closes, m, mk.spy_fwd, start, last_entry)
@@ -150,17 +166,33 @@ def main() -> int:
     market_up = (mk.spy > sma(mk.spy, 200)).fillna(False)
     mask, _, buffett_off, sec_missing = buffett_mask(mk, cache, start)
 
+    # 투자 가능 조건(신호일에 알 수 있는 값 + 수익률을 잴 수 있는 구간): 실제 거래가격 ≥ MIN_PRICE, 다음 20거래일 거래 기록 빠짐없음
+    cal = mk.spy.dropna().index  # 시장 거래일(SPY 기준)
+    raw = as_traded(mk.closes, mk.splits)
+    cheap = raw < MIN_PRICE
+    gaps = pd.DataFrame({s: gap_ahead(mk.closes[s].reindex(cal), max(btk.HORIZONS)) for s in mk.symbols})
+    gaps = gaps.reindex(mk.closes.index, fill_value=True)
+    valid = ~cheap & ~gaps & mk.closes.notna()
+    win = (mk.closes.index >= start) & (mk.closes.index <= last_entry)
+    have = mk.closes.loc[win].notna()
+    n_have, n_cheap = int(have.to_numpy().sum()), int((have & cheap.loc[win]).to_numpy().sum())
+    n_gap = int((have & ~cheap.loc[win] & gaps.loc[win]).to_numpy().sum())
+    cheap_tickers = int((have & cheap.loc[win]).any().sum())
+
     names: list[str] = []
-    evs = []
+    evs, dropped = [], []
     for s in mk.symbols:
         df = mk.prices[s]
         sig = all_signals(df, market_up)
         names = names or list(sig.columns)
+        ok = valid[s].reindex(df.index, fill_value=False)
         bm = mask[s].reindex(df.index, fill_value=False) if mask is not None else None
         for k in names:
-            evs.append(btk.events(s, df["Close"], sig[k], mk.spy_fwd, k, start, last_entry))
+            evs.append(btk.events(s, df["Close"], sig[k] & ok, mk.spy_fwd, k, start, last_entry))
             if bm is not None:
-                evs.append(btk.events(s, df["Close"], sig[k] & bm, mk.spy_fwd, f"버핏+{k}", start, last_entry))
+                evs.append(btk.events(s, df["Close"], sig[k] & ok & bm, mk.spy_fwd, f"버핏+{k}", start, last_entry))
+        low = cheap[s].reindex(df.index, fill_value=False)  # 진단: 가격 조건으로 빠진 RSI<30 신호
+        dropped.append(btk.events(s, df["Close"], sig["RSI<30"] & low, mk.spy_fwd, "RSI<30", start, last_entry))
     evs = [e for e in evs if len(e)]
     if not evs:
         raise SystemExit("신호가 하나도 없음 — 중단")
@@ -169,7 +201,13 @@ def main() -> int:
 
     top = [s for s in mk.symbols if mk.uni.at[s, "rank"] <= TOP_N]
     sets = {ALL: mk.symbols, TOP: top}
-    stats = {k: subset_stats(mk, syms, mask, market_up, ev, order, start, last_entry) for k, syms in sets.items()}
+    stats = {k: subset_stats(mk, syms, mask, market_up, valid, ev, order, start, last_entry) for k, syms in sets.items()}
+    dropped = [e for e in dropped if len(e)]
+    dr = pd.concat(dropped, ignore_index=True).dropna(subset=["ret_20"]) if dropped else pd.DataFrame(columns=["ret_20"])
+    if len(dr):  # 로그에만: 가격 조건으로 빠진 신호 중 수익률 상위 5건(왜곡의 예)
+        dr["price"] = [raw.at[d, t] for t, d in zip(dr["ticker"], dr["date"])]
+        print("가격 조건으로 빠진 RSI<30 신호 중 20거래일 수익률 상위 5건:")
+        print(dr.nlargest(5, "ret_20")[["ticker", "date", "price", "ret_20"]].to_string(index=False))
     stats[ALL].to_csv(out / "stats_all.csv", index=False)
     stats[TOP].to_csv(out / f"stats_top{TOP_N}.csv", index=False)
 
@@ -197,6 +235,14 @@ def main() -> int:
         "볼린저+RSI, 골든크로스 ± 거래량). 이름만 다른 같은 신호(RSI<30 첫날 = RSI<30, BB I 돌파 = BB-I)는 한 번만 센다",
         f"- 신호 기간: {start:%Y-%m-%d} ~ {last_entry:%Y-%m-%d} (마지막 일봉 {mk.closes.index[-1]:%Y-%m-%d}). "
         "수익률: 신호일 종가 → 5·10·20거래일 뒤 종가(분할 보정, 배당 미포함), 같은 종목·전략 20거래일 쿨다운. 매수·매도 권유가 아니다",
+        f"- 투자 가능 조건(신호·기준선 모두): 그날 실제 거래가격(분할 보정을 되돌린 값) ${MIN_PRICE:.0f} 이상, 다음 20거래일 거래 기록이 "
+        f"빠짐없을 때만. 기간 중 종목-날 {n_have:,}개 중 ${MIN_PRICE:.0f} 미만 {n_cheap:,}개({n_cheap / max(n_have, 1):.1%}, {cheap_tickers}종목), "
+        f"거래 공백 {n_gap:,}개를 뺐다",
+        (f"- 이 조건이 없던 첫 실행은 지금은 대형주지만 과거 동전주였던 구간의 극단 수익률 때문에 평균이 크게 부풀었다 — 조건으로 빠진 "
+         f"RSI<30 신호 {len(dr):,}건의 20거래일 평균 {pct(dr['ret_20'].mean())}, 중앙값 {pct(dr['ret_20'].median())}" if len(dr) else
+         "- 가격 조건으로 빠진 RSI<30 신호 없음"),
+        "- S&P 500 열은 앞 시험 값(이 조건 없음). S&P 500은 $5 미만 신호가 드물어 위 상위 5개 방법 기준 차이가 0.03%p 이하였다"
+        "(분할 보정가 기준 점검)",
         "- 한계: 현재 구성종목만(생존편향, 새로 상장한 종목은 이력이 짧음) · 같은 날 신호가 몰려 표준오차가 작게 나옴 · "
         "여러 방법을 비교해 우연히 좋아 보이는 결과가 섞일 수 있음 · 거래비용·세금 미반영",
         "",
