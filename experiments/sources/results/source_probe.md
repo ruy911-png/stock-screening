@@ -1,12 +1,12 @@
-# 출처 접속 시험 — 2026-10-05 03:54 UTC (GitHub Actions)
+# 출처 접속 시험 — 2026-10-05 03:56 UTC (GitHub Actions)
 
 원칙: robots.txt가 막은 경로는 요청 안 함 · 출처당 1~3회 · 정직한 User-Agent · 키 필요한 API는 키 없이 응답만 확인.
 
 ## 안 되는 것 (8)
-- **미장 SEC 티커→CIK 표** (CIK 조회): 안 됨
-- **미장 SEC EDGAR (ANET)** (공시 재무(분기·연간)): 안 됨 — 티커→CIK 못 찾음
-- **미장 SEC EDGAR (APH)** (공시 재무(분기·연간)): 안 됨 — 티커→CIK 못 찾음
-- **미장 SEC EDGAR (TSM)** (공시 재무(분기·연간)): 안 됨 — 티커→CIK 못 찾음
+- **미장 SEC 티커→CIK 표** (CIK 조회): 안 됨 — HTTP 403 — User-Agent: stock-screening backtest research github.com/ruy911-png/stock-screening
+- **미장 SEC EDGAR (ANET)** (공시 재무(분기·연간)): 안 됨 — HTTP 403
+- **미장 SEC EDGAR (APH)** (공시 재무(분기·연간)): 안 됨 — HTTP 403
+- **미장 SEC EDGAR (TSM)** (공시 재무(분기·연간)): 안 됨 — HTTP 403
 - **국장 Investing.com (www, 삼성전자)** (일봉): 안 됨 — HTTP 403
 - **국장 Investing.com (kr, 삼성전자)** (일봉): 안 됨 — HTTP 403
 - **국장 한국경제 Markets 종목 페이지** (일봉): 안 됨 — HTTP 404 — 종목 페이지 주소는 추정
@@ -26,10 +26,10 @@
 | 미장 | Arista IR | 실적·가이던스 | 허용 | 200 | 제목: Arista Networks - Home · PDF 링크 8개 · '실적' 단어 8회 | 접속됨 — 숫자는 보도자료(HTML/PDF), 회사마다 형식 다름 |  |
 | 미장 | Amphenol IR | 실적·가이던스 | 허용 | 200 | 제목: Amphenol Corporation - Investor Relations · PDF 링크 10개 · '실적' 단어 16회 | 접속됨 — 숫자는 보도자료(HTML/PDF), 회사마다 형식 다름 |  |
 | 미장 | TSMC IR | 실적·가이던스 | 허용 | 200 | 제목: TSMC 2026 Q3 Quarterly Results - Taiwan Semiconductor Manufa · PDF 링크 2개 · '실적' 단어 242회 | 접속됨 — 숫자는 보도자료(HTML/PDF), 회사마다 형식 다름 |  |
-| 미장 | SEC 티커→CIK 표 | CIK 조회 | - | HTTPError | - | 안 됨 |  |
-| 미장 | SEC EDGAR (ANET) | 공시 재무(분기·연간) | - | - | - | 안 됨 — 티커→CIK 못 찾음 |  |
-| 미장 | SEC EDGAR (APH) | 공시 재무(분기·연간) | - | - | - | 안 됨 — 티커→CIK 못 찾음 |  |
-| 미장 | SEC EDGAR (TSM) | 공시 재무(분기·연간) | - | - | - | 안 됨 — 티커→CIK 못 찾음 |  |
+| 미장 | SEC 티커→CIK 표 | CIK 조회 | - | 403 |          SEC.gov | Request Rate Threshold Exceeded    html {height: 100%} body {height: 100%; margin | 안 됨 — HTTP 403 | User-Agent: stock-screening backtest research github.com/ruy911-png/stock-screening |
+| 미장 | SEC EDGAR (ANET) | 공시 재무(분기·연간) | - | 403 |          SEC.gov | Your Request Originates from an Undeclared Automated Tool    html {height: 100%}  | 안 됨 — HTTP 403 |  |
+| 미장 | SEC EDGAR (APH) | 공시 재무(분기·연간) | - | 403 |          SEC.gov | Your Request Originates from an Undeclared Automated Tool    html {height: 100%}  | 안 됨 — HTTP 403 |  |
+| 미장 | SEC EDGAR (TSM) | 공시 재무(분기·연간) | - | 403 |          SEC.gov | Your Request Originates from an Undeclared Automated Tool    html {height: 100%}  | 안 됨 — HTTP 403 |  |
 | 미장 | 야후 yfinance (ANET) — 참고 | 일봉(현재 시험 코드 원천) | - | 200 | 44일, 최근 2026-10-02 | 됨 |  |
 | 국장 | Investing.com (www, 삼성전자) | 일봉 | 허용 | 403 | Just a moment... | 안 됨 — HTTP 403 |  |
 | 국장 | Investing.com (kr, 삼성전자) | 일봉 | 허용 | 403 | Just a moment... | 안 됨 — HTTP 403 |  |
