@@ -106,3 +106,23 @@ def test_evaluate_sector_median_and_daily_mask():
     mask = daily_mask(qual, pd.bdate_range("2019-03-29", "2019-04-03"))
     assert not mask.loc[pd.Timestamp("2019-03-29"), "GOOD"]   # 첫 체크포인트 이전
     assert mask.loc[pd.Timestamp("2019-04-01"), "GOOD"]       # 체크포인트 다음 날부터
+
+
+def test_sec_403_raises_blocked_without_retry(tmp_path, monkeypatch):
+    from bt import sec
+
+    calls = []
+
+    class Resp:
+        status_code = 403
+        text = "<html>Your Request Originates from an Undeclared Automated Tool</html>"
+
+    class Sess:
+        def get(self, *a, **k):
+            calls.append(1)
+            return Resp()
+
+    monkeypatch.setattr(sec.time, "sleep", lambda s: None)
+    with pytest.raises(sec.SecBlocked):
+        sec.fetch_companyfacts(320193, tmp_path, session=Sess())
+    assert len(calls) == 1  # 정책 차단은 재시도하지 않음

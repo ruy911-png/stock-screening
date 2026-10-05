@@ -99,6 +99,10 @@ def latest_shares(df: pd.DataFrame, asof: pd.Timestamp):
     return float(row["val"]), row["filed"]
 
 
+class SecBlocked(RuntimeError):
+    """SEC가 접근 정책(User-Agent 등)으로 막음(HTTP 403) — 재시도해도 소용없다."""
+
+
 def fetch_companyfacts(cik: int, cache_dir: Path, user_agent: str = DEFAULT_UA, session=None,
                        pause: float = 0.12) -> pd.DataFrame | None:
     """companyfacts를 받아 facts_frame으로 줄여 캐시한다. 실패하면 None."""
@@ -109,8 +113,14 @@ def fetch_companyfacts(cik: int, cache_dir: Path, user_agent: str = DEFAULT_UA, 
 
     sess = session or requests.Session()
     url = FACTS_URL.format(cik=cik)
+    resp = None
     for attempt in range(3):
-        resp = sess.get(url, headers={"User-Agent": user_agent, "Accept-Encoding": "gzip, deflate"}, timeout=60)
+        try:
+            resp = sess.get(url, headers={"User-Agent": user_agent, "Accept-Encoding": "gzip, deflate"}, timeout=60)
+        except requests.RequestException as e:  # 접속 오류는 재시도 후 실패로 보고
+            time.sleep(2 * (attempt + 1))
+            last_error = type(e).__name__
+            continue
         time.sleep(pause)
         if resp.status_code == 200:
             frame = facts_frame(resp.json())
@@ -119,11 +129,15 @@ def fetch_companyfacts(cik: int, cache_dir: Path, user_agent: str = DEFAULT_UA, 
             return frame
         if resp.status_code == 404:
             return None
-        if resp.status_code in (403, 429, 500, 502, 503):
+        if resp.status_code == 403:
+            snippet = " ".join(resp.text.split())[:120]
+            raise SecBlocked(f"SEC 403 (CIK {cik}, User-Agent '{user_agent}'): {snippet}")
+        if resp.status_code in (429, 500, 502, 503):
             time.sleep(2 * (attempt + 1))
             continue
         break
-    raise RuntimeError(f"SEC companyfacts 실패 CIK {cik}: HTTP {resp.status_code}")
+    reason = f"HTTP {resp.status_code}" if resp is not None else last_error
+    raise RuntimeError(f"SEC companyfacts 실패 CIK {cik}: {reason}")
 
 
 def load_json_gz(path: Path) -> dict:
