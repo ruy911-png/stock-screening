@@ -47,7 +47,22 @@ def load_market(cache: Path, price_start: str, limit: int = 0) -> Market:
 
 
 def buffett_mask(m: Market, cache: Path, start: pd.Timestamp):
-    """SEC 재무 → 월말 판정 → 거래일 마스크. 반환: (마스크 또는 None, 판정 기록, 미실행 사유 또는 None, 재무 없는 종목)."""
+    """SEC 재무 → 월말 판정 → 거래일 마스크. 반환: (마스크 또는 None, 판정 기록, 미실행 사유 또는 None, 재무 없는 종목).
+
+    같은 날·같은 종목·같은 기간이면 계산 결과를 캐시에서 다시 쓴다(한 실행의 여러 단계가 공유).
+    """
+    key = f"{start:%Y%m%d}_{m.closes.index[-1]:%Y%m%d}_{len(m.symbols)}_{pd.Timestamp.today():%Y%m%d}"
+    saved = Path(cache) / f"buffett_mask_{key}.pkl"
+    if saved.exists():
+        return pd.read_pickle(saved)
+    result = _buffett_mask(m, cache, start)
+    if result[2] is None:  # 미실행(SEC 차단 등)은 저장하지 않는다
+        saved.parent.mkdir(parents=True, exist_ok=True)
+        pd.to_pickle(result, saved)
+    return result
+
+
+def _buffett_mask(m: Market, cache: Path, start: pd.Timestamp):
     ua = os.environ.get("SEC_USER_AGENT") or DEFAULT_UA
     rows, sec_missing, off = {}, [], None
     for s in m.symbols:

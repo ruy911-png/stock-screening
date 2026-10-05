@@ -53,6 +53,11 @@ jobs:
         env:
           SEC_USER_AGENT: ${{ secrets.SEC_USER_AGENT }}
         run: python run_bb_rsi.py --out results
+      - name: 버핏 x 이동평균선 골든크로스(+ 거래량)
+        continue-on-error: true
+        env:
+          SEC_USER_AGENT: ${{ secrets.SEC_USER_AGENT }}
+        run: python run_ma_cross.py --out results
       - name: 결과 커밋
         if: always()
         run: |

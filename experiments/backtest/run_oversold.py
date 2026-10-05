@@ -17,7 +17,7 @@ from bt import backtest as btk  # noqa: E402
 from bt.indicators import sma  # noqa: E402
 from bt.oscillators import OVERSOLD, oversold_signals  # noqa: E402
 from bt.pipeline import buffett_mask, load_market  # noqa: E402
-from run_oscillators import pct, table  # noqa: E402
+from bt.runner import pct, table  # noqa: E402
 
 
 def main() -> int:
