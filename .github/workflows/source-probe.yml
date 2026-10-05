@@ -23,12 +23,10 @@ jobs:
         with:
           python-version: "3.11"
       - run: pip install -r requirements.txt
-      - name: 출처 접속 시험
+      # 앞선 시험(probe_sources·probe_alternatives) 결과는 results/에 있음 — 같은 사이트에 반복 요청하지 않게 이번 시험만 돌린다
+      - name: 레딧 반응 데이터 출처 시험
         continue-on-error: true
-        run: python probe_sources.py --out results
-      - name: 대체 출처 시험(야후·구글·네이버 재무)
-        continue-on-error: true
-        run: python probe_alternatives.py --out results
+        run: python probe_reddit.py --out results
       - name: 결과 커밋
         if: always()
         run: |
