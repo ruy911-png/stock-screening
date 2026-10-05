@@ -131,7 +131,8 @@ def fetch_companyfacts(cik: int, cache_dir: Path, user_agent: str = DEFAULT_UA, 
             return None
         if resp.status_code == 403:
             snippet = " ".join(resp.text.split())[:120]
-            raise SecBlocked(f"SEC 403 (CIK {cik}, User-Agent '{user_agent}'): {snippet}")
+            has_contact = "@" in user_agent  # User-Agent는 연락처가 들어 있을 수 있어 기록에 남기지 않는다
+            raise SecBlocked(f"SEC 403 (CIK {cik}, User-Agent 연락처 {'있음' if has_contact else '없음'}): {snippet}")
         if resp.status_code in (429, 500, 502, 503):
             time.sleep(2 * (attempt + 1))
             continue

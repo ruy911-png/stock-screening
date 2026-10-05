@@ -29,7 +29,7 @@ jobs:
         run: python run_sepa.py --out results
       - name: 버핏 x 볼린저 백테스트
         env:
-          SEC_USER_AGENT: ${{ vars.SEC_USER_AGENT }}
+          SEC_USER_AGENT: ${{ secrets.SEC_USER_AGENT }}  # 비밀값(로그에서 가려짐) — "이름 이메일"
         run: python run_backtest.py --out results
       - name: 결과 커밋
         if: always()
