@@ -24,7 +24,11 @@ jobs:
           python-version: "3.11"
       - run: pip install -r requirements.txt
       - name: 출처 접속 시험
+        continue-on-error: true
         run: python probe_sources.py --out results
+      - name: 대체 출처 시험(야후·구글·네이버 재무)
+        continue-on-error: true
+        run: python probe_alternatives.py --out results
       - name: 결과 커밋
         if: always()
         run: |
