@@ -60,3 +60,25 @@ def test_oversold_cross_signals(ohlcv):
     assert int(np.argmax(sig["RSI<30 첫날"].to_numpy())) < cross          # 먼저 내려가고 나중에 재돌파
     down = pd.Series(False, index=df.index)
     assert not oversold_signals(df, down)["RSI 30 재돌파 + 시장 상승"].any()  # 시장 하락 추세면 신호 없음
+
+
+def test_bb_rsi_signals(ohlcv):
+    from bt.bollinger_methods import add_indicators, method1
+    from bt.oscillators import bb_rsi_signals
+
+    # 하단 이탈 + RSI<30: 잔잔하다 급락
+    closes = [100.0 + (i % 2) for i in range(40)] + [99 - 2 * i for i in range(8)]
+    df = ohlcv(closes)
+    s = bb_rsi_signals(df)
+    r = rsi(df["Close"], 14)
+    t = int(np.argmax(s["BB 하단 이탈 + RSI<30"].to_numpy()))
+    ind = add_indicators(df)
+    assert s["BB 하단 이탈 + RSI<30"].sum() == 1 and ind["pctb"].iloc[t] < 0 and r.iloc[t] < 30
+    # I 돌파 + RSI>50: Squeeze 뒤 상단 돌파일, 그날 RSI가 50 초과면 신호
+    rng = np.random.default_rng(1)
+    base = list(100 + rng.normal(0, 1, 180).cumsum() * 0.3 + rng.normal(0, 1, 180))
+    closes = base + [100.0 + (i % 2) * 0.1 for i in range(30)] + [106.0]
+    df = ohlcv(closes)
+    s = bb_rsi_signals(df)
+    assert method1(add_indicators(df)).iloc[-1] and s["BB I 돌파"].iloc[-1]
+    assert s["BB I 돌파 + RSI>50"].iloc[-1] == (rsi(df["Close"], 14).iloc[-1] > 50)

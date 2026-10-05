@@ -17,6 +17,7 @@ import pandas as pd
 FACTS_URL = "https://data.sec.gov/api/xbrl/companyfacts/CIK{cik:010d}.json"
 DEFAULT_UA = "stock-screening backtest research github.com/ruy911-png/stock-screening"
 ANNUAL_FORMS = ("10-K", "10-K/A", "10-KT", "10-KT/A")
+CACHE_DAYS = 7  # 받아 둔 재무는 일주일 안에서만 다시 쓴다(새 10-K 반영)
 
 TAGS = {
     "revenue": ["Revenues", "RevenueFromContractWithCustomerExcludingAssessedTax", "SalesRevenueNet",
@@ -107,7 +108,7 @@ def fetch_companyfacts(cik: int, cache_dir: Path, user_agent: str = DEFAULT_UA, 
                        pause: float = 0.12) -> pd.DataFrame | None:
     """companyfacts를 받아 facts_frame으로 줄여 캐시한다. 실패하면 None."""
     cache = Path(cache_dir) / f"sec_{cik:010d}.pkl.gz"
-    if cache.exists():
+    if cache.exists() and time.time() - cache.stat().st_mtime < CACHE_DAYS * 86400:
         return pd.read_pickle(cache)
     import requests
 

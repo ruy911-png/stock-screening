@@ -103,3 +103,19 @@ def oversold_signals(df: pd.DataFrame, market_up: pd.Series) -> pd.DataFrame:
     all3 = _fresh((r < RSI_LOW) & (k < STOCH_LOW) & (wr < WR_LOW))
     cols = [rsi_first, rsi_cross, stoch_cross, wr_cross, all3, rsi_first & up, rsi_cross & up, all3 & up]
     return pd.DataFrame(dict(zip(OVERSOLD, cols)), index=df.index).astype(bool)
+
+
+# ── 볼린저 + RSI 조합 (사용자 요청 2026-10-05: "둘 다 해봐 버핏 붙여서") ──
+BB_RSI = ["BB 하단 이탈 첫날", "BB 하단 이탈 + RSI<30", "BB I 돌파", "BB I 돌파 + RSI>50"]
+
+
+def bb_rsi_signals(df: pd.DataFrame) -> pd.DataFrame:
+    """df: Open·High·Low·Close·Volume. 하단 이탈 = 종가 < 하단 밴드(%b < 0), I 돌파 = Method I 신호(명세 §2.2 조건 3·4)."""
+    from .bollinger_methods import add_indicators, method1
+
+    ind = add_indicators(df[["Open", "High", "Low", "Close", "Volume"]])
+    r = rsi(df["Close"], 14)
+    below = ind["pctb"] < 0
+    m1 = method1(ind)
+    cols = [_fresh(below), _fresh(below & (r < RSI_LOW)), m1, m1 & (r > 50.0).fillna(False)]
+    return pd.DataFrame(dict(zip(BB_RSI, cols)), index=df.index).astype(bool)

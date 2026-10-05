@@ -9,7 +9,7 @@ permissions:
   contents: write
 concurrency:
   group: backtest-experiment
-  cancel-in-progress: true
+  cancel-in-progress: false  # 새 푸시는 진행 중인 실행을 취소하지 않고 끝날 때까지 기다린다
 jobs:
   run:
     runs-on: ubuntu-latest
@@ -23,6 +23,13 @@ jobs:
         with:
           python-version: "3.11"
       - run: pip install -r requirements.txt
+      - name: 받아 둔 일봉·SEC 재무 다시 쓰기(일봉은 날짜별, 재무는 7일)
+        uses: actions/cache@v4
+        with:
+          path: experiments/backtest/.cache
+          key: bt-cache-${{ github.run_id }}
+          restore-keys: |
+            bt-cache-
       - run: python -m pytest -q tests
       - name: SEPA 실행 확인
         continue-on-error: true  # 검산 불일치여도 백테스트는 계속, 내용은 results/sepa_screen.md
@@ -41,6 +48,11 @@ jobs:
         env:
           SEC_USER_AGENT: ${{ secrets.SEC_USER_AGENT }}
         run: python run_oversold.py --out results
+      - name: 버핏 x 볼린저+RSI 조합
+        continue-on-error: true
+        env:
+          SEC_USER_AGENT: ${{ secrets.SEC_USER_AGENT }}
+        run: python run_bb_rsi.py --out results
       - name: 결과 커밋
         if: always()
         run: |

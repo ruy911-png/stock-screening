@@ -9,6 +9,7 @@
 | `run_sepa.py` | 지금 시세로 SEPA Trend Template(명세 §3.2, 코드 부분)이 제대로 도는지 확인 — 단계별 통과 수, 통과 종목, 자체 검산 | `results/sepa_screen.md`, `sepa_screen_all.csv` |
 | `run_oscillators.py` | 버핏 숫자 필터 × RSI·스토캐스틱·윌리엄스 %R 과매수·과매도 신호(+ PRD (b)안 참고) | `results/oscillators.md`, `oscillators_stats.csv`, `oscillators_events.csv` |
 | `run_oversold.py` | 과매도 매수 진입 변형(RSI 30 재돌파, 스토캐스틱 과매도 골든크로스, 윌리엄스 %R −80 재돌파, 시장 상승 조건) — 버핏 유무 | `results/oversold.md`, `oversold_stats.csv`, `oversold_events.csv` |
+| `run_bb_rsi.py` | 버핏 × 볼린저+RSI 조합(하단 이탈 + RSI<30, Method I 돌파 + RSI>50) | `results/bb_rsi.md`, `bb_rsi_stats.csv`, `bb_rsi_events.csv` |
 | `run_backtest.py` | 버핏 숫자 필터 × 볼린저 Method I·II·III(+ 참고 I+II) 신호의 5·10·20거래일 수익률 비교, 기준선(유니버스·버핏 통과 종목·SPY) | `results/backtest.md`, `backtest_stats.csv`, `backtest_events.csv`, `buffett_checkpoints.csv` |
 
 ## 실행
