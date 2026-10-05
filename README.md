@@ -59,6 +59,7 @@
 | [docs/strategies/](docs/strategies/) | 기법별 명세 |
 | [docs/backlog.md](docs/backlog.md) | 단계별 작업 목록 · 우선순위 |
 | [CLAUDE.md](CLAUDE.md) | 개발 규칙 |
+| [docs/handoff.md](docs/handoff.md) | 인수인계 — 새 대화에서 이어가기 |
 
 ## 개발 방식 (Claude Code 에이전트 팀)
 | 역할 | 모델 | 담당 |
