@@ -140,10 +140,21 @@ def parse_ir(res: Result, r: requests.Response):
 
 # ── 개별 출처 ───────────────────────────────────────────────
 
-def sec_ticker_ciks() -> dict:
-    r = fetch("https://www.sec.gov/files/company_tickers.json", headers={"User-Agent": SEC_UA})
-    r.raise_for_status()
-    return {v["ticker"]: int(v["cik_str"]) for v in r.json().values()}
+def sec_ticker_ciks() -> tuple[Result, dict]:
+    url = "https://www.sec.gov/files/company_tickers.json"
+    res = Result("미장", "SEC 티커→CIK 표", "CIK 조회", url, note=f"User-Agent: {SEC_UA}")
+    try:
+        r = fetch(url, headers={"User-Agent": SEC_UA})
+    except requests.RequestException as e:
+        res.status, res.verdict = type(e).__name__, "안 됨 — 접속 실패"
+        return res, {}
+    res.status = str(r.status_code)
+    if r.status_code != 200:
+        res.data = re.sub(r"<[^>]+>|\s+", " ", r.text)[:100]
+        res.verdict = f"안 됨 — HTTP {r.status_code}"
+        return res, {}
+    res.data, res.verdict = f"{len(r.json())}개 티커", "됨"
+    return res, {v["ticker"]: int(v["cik_str"]) for v in r.json().values()}
 
 
 def sec_probe(ticker: str, ciks: dict) -> Result:
@@ -160,9 +171,12 @@ def sec_probe(ticker: str, ciks: dict) -> Result:
         return res
     res.status = str(r.status_code)
     if r.status_code != 200:
+        res.data = re.sub(r"<[^>]+>|\s+", " ", r.text)[:100]
         res.verdict = f"안 됨 — HTTP {r.status_code}"
         return res
-    facts = r.json().get("facts", {})
+    body = r.json()
+    res.source += f" — {body.get('entityName', '')}"
+    facts = body.get("facts", {})
     taxos = {k: len(v) for k, v in facts.items()}
     forms, quarterly_rev, last_q = set(), 0, None
     for taxo in facts.values():
@@ -312,12 +326,10 @@ def main() -> int:
                       ("Amphenol IR", "https://investors.amphenol.com/"),
                       ("TSMC IR", "https://investor.tsmc.com/english/quarterly-results")]:
         results.append(web_probe(Result("미장", name, "실적·가이던스", url), parse_ir)[0])
-    try:
-        ciks = sec_ticker_ciks()
-    except Exception as e:  # noqa: BLE001
-        ciks = {}
-        results.append(Result("미장", "SEC 티커→CIK 표", "CIK 조회", "https://www.sec.gov/files/company_tickers.json",
-                              status=type(e).__name__, verdict="안 됨"))
+    map_res, ciks = sec_ticker_ciks()
+    results.append(map_res)
+    # 표를 못 받아도 회사 재무 API는 따로 시험: ANET·APH는 S&P 500 구성종목 CSV의 CIK, TSM은 추정 CIK(응답의 회사명으로 확인)
+    ciks = {"ANET": 1596532, "APH": 820313, "TSM": 1046179, **ciks}
     for t in ("ANET", "APH", "TSM"):
         results.append(sec_probe(t, ciks))
         time.sleep(0.2)
