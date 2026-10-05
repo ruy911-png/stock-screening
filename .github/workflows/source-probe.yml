@@ -24,9 +24,9 @@ jobs:
           python-version: "3.11"
       - run: pip install -r requirements.txt
       # 앞선 시험(probe_sources·probe_alternatives) 결과는 results/에 있음 — 같은 사이트에 반복 요청하지 않게 이번 시험만 돌린다
-      - name: 레딧 반응 데이터 출처 시험
+      - name: Arctic Shift 재시험
         continue-on-error: true
-        run: python probe_reddit.py --out results
+        run: python probe_arctic.py --out results
       - name: 결과 커밋
         if: always()
         run: |
