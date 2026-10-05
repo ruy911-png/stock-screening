@@ -5,7 +5,6 @@
 from __future__ import annotations
 
 import argparse
-import os
 import sys
 import time
 from pathlib import Path
@@ -16,11 +15,8 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 from bt import backtest as btk  # noqa: E402
 from bt.bollinger_methods import METHODS, add_indicators, signals  # noqa: E402
-from bt.buffett import CRITERIA, build_snapshots, daily_mask, evaluate  # noqa: E402
-from bt.data import download_prices, load_universe  # noqa: E402
-from bt.sec import DEFAULT_UA, SecBlocked, fetch_companyfacts  # noqa: E402
-
-BENCH = "SPY"
+from bt.buffett import CRITERIA  # noqa: E402
+from bt.pipeline import buffett_mask, load_market  # noqa: E402
 
 
 def pct(x, digits=2, sign=True):
@@ -41,51 +37,16 @@ def main() -> int:
     out.mkdir(parents=True, exist_ok=True)
     t0 = time.time()
 
-    uni = load_universe(cache)
-    uni = uni[uni["sector"] != "Financials"]
-    if args.limit:
-        uni = uni.iloc[:args.limit]
-    symbols = list(uni.index)
-
-    prices, failed = download_prices(symbols + [BENCH], args.price_start, cache)
-    if BENCH not in prices:
-        raise SystemExit("SPY 일봉을 받지 못함 — 중단")
-    spy = prices.pop(BENCH)["Close"]
-    symbols = [s for s in symbols if s in prices]
-    closes = pd.DataFrame({s: prices[s]["Close"] for s in symbols}).sort_index()
-    splits = pd.DataFrame({s: prices[s]["Stock Splits"] for s in symbols}).reindex(closes.index)
-    spy = spy.reindex(closes.index)
-    spy_fwd = pd.DataFrame({h: btk.forward_returns(spy, h) for h in btk.HORIZONS})
+    mk = load_market(cache, args.price_start, args.limit)
+    symbols, prices, failed, closes = mk.symbols, mk.prices, mk.failed, mk.closes
+    spy_fwd = mk.spy_fwd
 
     # 기간: 신호는 [start, 마지막 거래일 − 20거래일]
     start = pd.Timestamp(args.start)
     last_entry = closes.index[-1 - max(btk.HORIZONS)]
 
-    # 버핏: SEC 재무 → 제출일별 지표 → 월말 체크포인트 판정 → 거래일 마스크
-    ua = os.environ.get("SEC_USER_AGENT") or DEFAULT_UA
-    rows, sec_missing, buffett_off = {}, [], None
-    for s in symbols:
-        try:
-            r = fetch_companyfacts(int(uni.at[s, "cik"]), cache, ua)
-        except SecBlocked as e:  # 정책 차단: 남은 종목도 같으므로 바로 멈추고 볼린저만 진행
-            print(e)
-            buffett_off = f"SEC가 접근을 막음 — {e}"
-            break
-        except RuntimeError as e:
-            print(e)
-            r = None
-        if r is None or r.empty:
-            sec_missing.append(s)
-        else:
-            rows[s] = r
-    if buffett_off is None and len(sec_missing) > len(symbols) / 2:
-        buffett_off = f"SEC 재무를 절반 넘게 못 받음({len(sec_missing)}/{len(symbols)})"
-    mask, records = None, pd.DataFrame()
-    if buffett_off is None:
-        snaps = {s: build_snapshots(r) for s, r in rows.items()}
-        ckpts = pd.date_range(start - pd.offsets.MonthEnd(1), closes.index[-1], freq="ME")
-        qual, records = evaluate(snaps, rows, uni["sector"], closes, splits, ckpts)
-        mask = daily_mask(qual, closes.index).reindex(columns=symbols, fill_value=False)
+    # 버핏: SEC 재무 → 제출일별 지표 → 월말 체크포인트 판정 → 거래일 마스크 (못 쓰면 볼린저만 진행)
+    mask, records, buffett_off, sec_missing = buffett_mask(mk, cache, start)
 
     # 볼린저 신호 → 이벤트 (버핏 필터를 못 쓰면 볼린저 단독만)
     order = [f"BB-{m}" for m in METHODS] + ([f"버핏+BB-{m}" for m in METHODS] if mask is not None else [])
