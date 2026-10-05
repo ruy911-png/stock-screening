@@ -1,0 +1,82 @@
+# 시험용: 레딧(WSB) 반응 긍정 백테스트 (사용자 요청 2026-10-05)
+# 연도별로 Arctic Shift에서 게시물 제목을 받아 숫자로만 집계(원문 저장 안 함) → 합쳐서 백테스트 → 결과 커밋
+name: reddit-experiment
+on:
+  push:
+    branches: [test/backtest-sepa-buffett-bb]
+    paths: ["experiments/reddit/**", "!experiments/reddit/results/**", ".github/workflows/reddit-experiment.yml"]
+  workflow_dispatch:
+permissions:
+  contents: write
+concurrency:
+  group: reddit-experiment
+  cancel-in-progress: true
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    defaults:
+      run:
+        working-directory: experiments/reddit
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - run: pip install -r requirements.txt
+      - run: python -m pytest -q tests
+  collect:
+    needs: test
+    runs-on: ubuntu-latest
+    timeout-minutes: 150
+    strategy:
+      fail-fast: false
+      max-parallel: 4  # 아카이브 서버 부담: 동시 4개 × 약 4초당 1회
+      matrix:
+        year: [2019, 2020, 2021, 2022, 2023, 2024, 2025, 2026]
+    defaults:
+      run:
+        working-directory: experiments/reddit
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - run: pip install -r requirements.txt
+      - name: 게시물 수집·집계 (${{ matrix.year }})
+        run: python collect.py --year ${{ matrix.year }} --out data
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: wsb-${{ matrix.year }}
+          path: experiments/reddit/data/
+          retention-days: 7
+  analyze:
+    needs: collect
+    if: always()
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    defaults:
+      run:
+        working-directory: experiments/reddit
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - run: pip install -r requirements.txt
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: wsb-*
+          path: experiments/reddit/data
+          merge-multiple: true
+      - name: 백테스트
+        run: python run_reddit.py --data data --out results
+      - name: 결과 커밋
+        if: always()
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add results
+          git diff --cached --quiet || git commit -m "레딧 백테스트 결과 (reddit-experiment)"
+          for i in 1 2 3; do git pull --rebase origin "${GITHUB_REF_NAME}" && git push origin "HEAD:${GITHUB_REF_NAME}" && break; sleep 5; done
