@@ -1,7 +1,7 @@
 import pandas as pd
 
 import collect
-from run_reddit import entry_mask, make_signals
+from run_reddit import baseline_days, entry_mask, make_signals
 from wsb import extract_tickers, sentiment
 
 UNI = {"NVDA", "AAPL", "MSFT", "NOW", "ALL", "BRK-B", "TSLA", "C"}
@@ -76,3 +76,12 @@ def test_options_jargon_is_not_a_ticker():
     uni = {"DTE", "PSA", "NVDA"}
     assert extract_tickers("PSA: 0 DTE NVDA calls", uni) == {"NVDA"}
     assert extract_tickers("$DTE earnings", uni) == {"DTE"}
+
+
+def test_baseline_days_follow_collected_dates():
+    days = pd.DatetimeIndex(["2020-12-30", "2020-12-31", "2021-01-04", "2021-01-05", "2021-01-07", "2021-01-08"])
+    cov = pd.DataFrame({"date": pd.to_datetime(["2020-12-30", "2020-12-31", "2021-01-07"]),
+                        "status": ["성공", "일부", "실패"]})
+    m = baseline_days(days, cov)
+    # 12/30 → 12/31, 12/31 → 1/4(신호와 같은 매핑). 수집 안 한 1/4~1/6과 실패한 1/7의 다음 날은 기준선에서 빠진다
+    assert list(days[m.to_numpy()]) == [pd.Timestamp("2020-12-31"), pd.Timestamp("2021-01-04")]

@@ -73,6 +73,11 @@ def entry_mask(days: pd.DatetimeIndex, signal_dates: pd.Series) -> pd.Series:
     return mask
 
 
+def baseline_days(days: pd.DatetimeIndex, cov: pd.DataFrame) -> pd.Series:
+    """기준선에 넣을 거래일: 수집한(실패 아닌) UTC 날짜의 다음 거래일 — 신호가 나올 수 있는 날과 같은 범위(제외 연도는 빠진다)."""
+    return entry_mask(days, cov.loc[cov["status"] != "실패", "date"])
+
+
 def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--data", default="data")
@@ -109,10 +114,13 @@ def main() -> int:
     ev = pd.concat([e for e in evs if len(e)], ignore_index=True)
     ev.to_csv(out / "reddit_events.csv", index=False)
     stats = btk.stats_table(ev, order)
-    allday = btk.all_day_returns(closes, None, spy_fwd, start, last_entry)
+    # 기준선도 신호와 같은 날짜 범위만(2026-10-05 수정: 전에는 수집에서 뺀 2021년이 기준선에 들어 있었다)
+    ok_days = baseline_days(days, cov)
+    day_mask = pd.DataFrame({t: ok_days for t in closes.columns}, index=days)
+    allday = btk.all_day_returns(closes, day_mask, spy_fwd, start, last_entry)
     base = [{"strategy": "기준선: S&P 500 아무 날", "h": h, **btk.summarize(allday[h]["ret"], allday[h]["ex"])}
             for h in btk.HORIZONS]
-    win = (spy_fwd.index >= start) & (spy_fwd.index <= last_entry)
+    win = (spy_fwd.index >= start) & (spy_fwd.index <= last_entry) & ok_days.to_numpy()
     base += [{"strategy": "기준선: SPY 아무 날", "h": h,
               **btk.summarize(spy_fwd[h][win], spy_fwd[h][win] * float("nan"))} for h in btk.HORIZONS]
     stats = pd.concat([stats, pd.DataFrame(base)], ignore_index=True)
@@ -120,6 +128,7 @@ def main() -> int:
     yearly_mean, yearly_n = btk.yearly_table(ev, order)
 
     cov["year"] = cov["date"].dt.year
+    skipped = sorted(set(range(start.year, last_entry.year + 1)) - set(cov["year"]))
     cov_tab = cov.groupby("year").agg(days=("date", "count"), ok=("status", lambda s: (s == "성공").sum()),
                                       part=("status", lambda s: (s == "일부").sum()),
                                       fail=("status", lambda s: (s == "실패").sum()),
@@ -146,6 +155,8 @@ def main() -> int:
         f"- 신호: 하루 언급 글 {MIN_POSTS}개 이상 + VADER(WSB 은어 추가) 평균 감성으로 긍정/부정, 긍정+급증 = 직전 30일 평균의 {SPIKE:.0f}배 이상",
         "- 기준가: 신호 날짜(UTC) 다음 거래일 종가 → 5·10·20거래일 뒤 종가(분할 보정, 배당 미포함). 같은 종목·전략 20거래일 쿨다운",
         f"- 집계 기간: {start:%Y-%m-%d} ~ {last_entry:%Y-%m-%d}. 매수·매도 권유가 아니다. 임시값·한계는 README.md",
+        f"- 기준선: 수집한 날짜(실패한 날·수집 안 한 연도 {', '.join(map(str, skipped)) or '없음'} 제외)의 다음 거래일만 — 신호와 같은 날짜 범위"
+        " (2026-10-05 수정: 전에는 기준선에 2021년이 들어 있었음)",
         "",
         "## 20거래일 수익률", *table(20), "",
         "## 10거래일 수익률", *table(10), "",
