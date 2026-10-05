@@ -1,0 +1,39 @@
+# 시험용: experiments/backtest 실행 → 결과를 같은 브랜치에 커밋 (사용자 요청 2026-10-05)
+# 실행 위치(Actions / 세션 네트워크 허용)는 사용자 결정 대기 중 → 푸시로는 실행되지 않게 수동 실행만 둔다.
+# Actions로 정해지면 push 트리거(branches: [test/backtest-sepa-buffett-bb])를 추가한다.
+name: backtest-experiment
+on:
+  workflow_dispatch:
+permissions:
+  contents: write
+concurrency:
+  group: backtest-experiment
+  cancel-in-progress: true
+jobs:
+  run:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    defaults:
+      run:
+        working-directory: experiments/backtest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - run: pip install -r requirements.txt
+      - run: python -m pytest -q tests
+      - name: SEPA 실행 확인
+        run: python run_sepa.py --out results
+      - name: 버핏 x 볼린저 백테스트
+        env:
+          SEC_USER_AGENT: ${{ vars.SEC_USER_AGENT }}
+        run: python run_backtest.py --out results
+      - name: 결과 커밋
+        if: always()
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add results
+          git diff --cached --quiet || git commit -m "시험 결과 갱신 (backtest-experiment)"
+          git push
