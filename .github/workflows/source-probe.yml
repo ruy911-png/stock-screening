@@ -1,0 +1,35 @@
+# 시험용: 출처별 실제 접속 확인 → 결과를 같은 브랜치에 커밋 (사용자 요청 2026-10-05)
+name: source-probe
+on:
+  push:
+    branches: [test/source-probe]
+    paths: ["experiments/sources/**", "!experiments/sources/results/**", ".github/workflows/source-probe.yml"]
+  workflow_dispatch:
+permissions:
+  contents: write
+concurrency:
+  group: source-probe
+  cancel-in-progress: true
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    defaults:
+      run:
+        working-directory: experiments/sources
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - run: pip install -r requirements.txt
+      - name: 출처 접속 시험
+        run: python probe_sources.py --out results
+      - name: 결과 커밋
+        if: always()
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add results
+          git diff --cached --quiet || git commit -m "출처 접속 시험 결과 (source-probe)"
+          for i in 1 2 3; do git pull --rebase origin "${GITHUB_REF_NAME}" && git push origin "HEAD:${GITHUB_REF_NAME}" && break; sleep 5; done
