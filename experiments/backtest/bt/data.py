@@ -62,15 +62,17 @@ def drop_unfinished_session(df: pd.DataFrame, now: pd.Timestamp | None = None) -
     return df
 
 
-def download_prices(symbols: list[str], start: str, cache_dir: Path, chunk: int = 50,
-                    pause: float = 2.0) -> tuple[dict[str, pd.DataFrame], list[str]]:
+def download_prices(symbols: list[str], start: str, cache_dir: Path, chunk: int = 50, pause: float = 2.0,
+                    now: pd.Timestamp | None = None) -> tuple[dict[str, pd.DataFrame], list[str]]:
     """symbols(원 표기) → {symbol: 일봉}, 실패 목록. 캐시는 하루 단위로 새로 받는다.
 
     같은 날 다른 유니버스가 받아 둔 종목은 다시 쓰고, 없는 종목만 받아 캐시에 합친다.
+    캐시는 뉴욕 날짜 × 장 마감 전/후로 나누고, 마감 전 장중 일봉은 캐시에 넣지 않는다(마감 뒤 실행이 옛 장중 가격을 쓰지 않게).
     """
     import yfinance as yf
 
-    cache = Path(cache_dir) / f"prices_{start}_{pd.Timestamp.today():%Y%m%d}.pkl"
+    now = now if now is not None else pd.Timestamp.now(tz="America/New_York")
+    cache = Path(cache_dir) / f"prices_{start}_{now:%Y%m%d}_{'close' if now.hour >= 17 else 'open'}.pkl"
     got: dict[str, pd.DataFrame] = pd.read_pickle(cache) if cache.exists() else {}
     todo = [s for s in symbols if s not in got]
     for i in range(0, len(todo), chunk):
@@ -81,7 +83,7 @@ def download_prices(symbols: list[str], start: str, cache_dir: Path, chunk: int 
         for s, y in zip(part, ysyms):
             df = _split_frame(raw, y) if raw is not None and not raw.empty else None
             if df is not None:
-                got[s] = df
+                got[s] = drop_unfinished_session(df, now)
         time.sleep(pause)
     failed = [s for s in todo if s not in got]
     for s in list(failed):  # 하나씩 재시도
@@ -89,7 +91,7 @@ def download_prices(symbols: list[str], start: str, cache_dir: Path, chunk: int 
             raw = yf.Ticker(yahoo_symbol(s)).history(start=start, auto_adjust=False, actions=True)
             df = _split_frame(raw, yahoo_symbol(s))
             if df is not None:
-                got[s] = df
+                got[s] = drop_unfinished_session(df, now)
                 failed.remove(s)
         except Exception:  # noqa: BLE001 — 실패 종목은 목록으로 보고
             pass
@@ -97,7 +99,7 @@ def download_prices(symbols: list[str], start: str, cache_dir: Path, chunk: int 
     if todo:
         cache.parent.mkdir(parents=True, exist_ok=True)
         pd.to_pickle(got, cache)
-    return {s: drop_unfinished_session(got[s]) for s in symbols if s in got}, failed
+    return {s: got[s] for s in symbols if s in got}, failed
 
 
 def quality_flags(df: pd.DataFrame) -> list[str]:

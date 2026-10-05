@@ -54,3 +54,28 @@ def test_drop_unfinished_session_only_before_close():
     assert len(drop_unfinished_session(df, pd.Timestamp("2026-10-05 11:00", tz=ny))) == 2  # 장중 → 오늘 행 제외
     assert len(drop_unfinished_session(df, pd.Timestamp("2026-10-05 18:00", tz=ny))) == 3  # 마감 후 → 유지
     assert len(drop_unfinished_session(df, pd.Timestamp("2026-10-06 09:00", tz=ny))) == 3  # 다음 날
+
+
+def test_download_prices_never_caches_intraday_bar(tmp_path, monkeypatch):
+    import sys
+    import types
+
+    from bt import data
+
+    calls = []
+    idx = pd.DatetimeIndex(["2026-10-01", "2026-10-02", "2026-10-05"])
+    cols = pd.MultiIndex.from_product([["AAA"], ["Open", "High", "Low", "Close", "Volume", "Stock Splits"]])
+
+    def download(ysyms, **kw):
+        calls.append(list(ysyms))
+        return pd.DataFrame(1.0, index=idx, columns=cols)
+
+    monkeypatch.setitem(sys.modules, "yfinance", types.SimpleNamespace(download=download))
+    ny = "America/New_York"
+    got, failed = data.download_prices(["AAA"], "2010-01-01", tmp_path, pause=0,
+                                       now=pd.Timestamp("2026-10-05 11:00", tz=ny))
+    assert len(got["AAA"]) == 2 and not failed                       # 장중 오늘 행은 빼고
+    assert len(pd.read_pickle(tmp_path / "prices_2010-01-01_20261005_open.pkl")["AAA"]) == 2  # 캐시에도 없음
+    got, _ = data.download_prices(["AAA"], "2010-01-01", tmp_path, pause=0,
+                                  now=pd.Timestamp("2026-10-05 18:00", tz=ny))
+    assert len(got["AAA"]) == 3 and len(calls) == 2                  # 마감 뒤에는 새로 받아 오늘 행 포함
