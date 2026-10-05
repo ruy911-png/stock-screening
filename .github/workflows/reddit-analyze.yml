@@ -1,0 +1,62 @@
+# 시험용: 레딧 수집 실행(37263705844)의 연도별 집계를 받아 2021년을 빼고 백테스트 (사용자 요청 2026-10-05: "21년 빼고 해")
+# 2021년(밈 주식 급등기)은 글이 많아 수집이 작업 한도 안에 끝나지 않아 제외
+name: reddit-analyze
+on:
+  push:
+    branches: [test/backtest-sepa-buffett-bb]
+    paths: [".github/workflows/reddit-analyze.yml"]
+  workflow_dispatch:
+permissions:
+  contents: write
+  actions: read
+concurrency:
+  group: reddit-analyze
+  cancel-in-progress: false
+env:
+  SOURCE_RUN: "37263705844"
+  EXCLUDE_YEARS: "2021"
+jobs:
+  analyze:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    defaults:
+      run:
+        working-directory: experiments/reddit
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - run: pip install -r requirements.txt
+      - name: 수집 실행의 연도별 집계 받기
+        uses: actions/download-artifact@v4
+        with:
+          pattern: wsb-*
+          path: experiments/reddit/data
+          merge-multiple: true
+          run-id: ${{ env.SOURCE_RUN }}
+          github-token: ${{ github.token }}
+      - name: 제외 연도 지우기
+        run: |
+          for y in $EXCLUDE_YEARS; do rm -f data/wsb_ticker_day_${y}.csv data/wsb_coverage_${y}.csv; done
+          ls -l data
+      - name: 백테스트
+        run: python run_reddit.py --data data --out results
+      - name: 결과 커밋
+        if: always()
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          tmp="$(mktemp -d)"
+          cp -r results "$tmp/"
+          for i in 1 2 3; do
+            git fetch -q origin "${GITHUB_REF_NAME}"
+            git reset -q --hard "origin/${GITHUB_REF_NAME}"
+            rm -rf results && cp -r "$tmp/results" results
+            git add -A results
+            if git diff --cached --quiet; then echo "변경 없음"; exit 0; fi
+            git commit -q -m "레딧 백테스트 결과 (2021 제외)"
+            if git push -q origin "HEAD:${GITHUB_REF_NAME}"; then echo "결과 푸시 완료"; exit 0; fi
+            sleep 5
+          done
+          echo "결과 푸시 실패"; exit 1
