@@ -159,9 +159,9 @@
   "purpose": "공시 재무·기업정보",
   "url": "https://opendart.fss.or.kr/api/company.json?corp_code=00126380&crtfc_key=(키 없음)",
   "robots": "-",
-  "status": "200",
-  "data": "status 010 · 등록되지 않은 인증키입니다.",
-  "verdict": "키 필요 — 인증키 발급 후 사용",
+  "status": "ConnectTimeout",
+  "data": "-",
+  "verdict": "안 됨 — 접속 실패",
   "note": ""
  },
  {
@@ -191,7 +191,7 @@
   "source": "KIND",
   "purpose": "시장경보 공시",
   "url": "https://kind.krx.co.kr/",
-  "robots": "허용(robots.txt 없음 404)",
+  "robots": "허용",
   "status": "200",
   "data": "페이지 제목: ëíë¯¼êµ­ ëí ê¸°ì ê³µìì±ë KIND",
   "verdict": "접속됨",
