@@ -24,6 +24,7 @@ class Market:
     closes: pd.DataFrame
     splits: pd.DataFrame
     spy_fwd: pd.DataFrame
+    spy: pd.Series
 
 
 def load_market(cache: Path, price_start: str, limit: int = 0) -> Market:
@@ -42,7 +43,7 @@ def load_market(cache: Path, price_start: str, limit: int = 0) -> Market:
     splits = pd.DataFrame({s: prices[s]["Stock Splits"] for s in symbols}).reindex(closes.index)
     spy = spy.reindex(closes.index)
     spy_fwd = pd.DataFrame({h: btk.forward_returns(spy, h) for h in btk.HORIZONS})
-    return Market(uni, symbols, prices, failed, closes, splits, spy_fwd)
+    return Market(uni, symbols, prices, failed, closes, splits, spy_fwd, spy)
 
 
 def buffett_mask(m: Market, cache: Path, start: pd.Timestamp):

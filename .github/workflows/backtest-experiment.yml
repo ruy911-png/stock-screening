@@ -36,6 +36,11 @@ jobs:
         env:
           SEC_USER_AGENT: ${{ secrets.SEC_USER_AGENT }}
         run: python run_oscillators.py --out results  # SEC·일봉은 앞 단계 캐시를 다시 씀
+      - name: 과매도 매수 진입 변형(버핏 유무, 시장 상승 조건)
+        continue-on-error: true
+        env:
+          SEC_USER_AGENT: ${{ secrets.SEC_USER_AGENT }}
+        run: python run_oversold.py --out results
       - name: 결과 커밋
         if: always()
         run: |

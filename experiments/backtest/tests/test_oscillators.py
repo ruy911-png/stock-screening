@@ -45,3 +45,18 @@ def test_oversold_signal_fires_once_on_first_day(ohlcv):
     first = int(np.argmax((r < 30).to_numpy()))
     assert sig["RSI<30"].sum() == 1 and sig["RSI<30"].iloc[first]
     assert not sig["RSI>70"].iloc[40:].any()
+
+
+def test_oversold_cross_signals(ohlcv):
+    from bt.oscillators import oversold_signals
+
+    closes = [100.0 + (i % 2) for i in range(40)] + [99 - 2 * i for i in range(10)] + [81 + 3 * i for i in range(10)]
+    df = ohlcv(closes)
+    up = pd.Series(True, index=df.index)
+    sig = oversold_signals(df, up)
+    r = rsi(df["Close"], 14)
+    cross = int(np.argmax(((r.shift(1) < 30) & (r >= 30)).to_numpy()))
+    assert sig["RSI 30 재돌파"].iloc[cross] and sig["RSI 30 재돌파"].sum() == 1
+    assert int(np.argmax(sig["RSI<30 첫날"].to_numpy())) < cross          # 먼저 내려가고 나중에 재돌파
+    down = pd.Series(False, index=df.index)
+    assert not oversold_signals(df, down)["RSI 30 재돌파 + 시장 상승"].any()  # 시장 하락 추세면 신호 없음

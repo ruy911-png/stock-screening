@@ -81,3 +81,25 @@ def signals(df: pd.DataFrame) -> pd.DataFrame:
         "(b)안 200일선·6개월↑·RSI(2)<10": (c > sma(c, 200)) & (roc(c, 126) > 0) & (r2 < 10),
     }
     return pd.DataFrame({k: _fresh(v) for k, v in conds.items()}, index=df.index)
+
+
+# ── 과매도 매수 진입 변형 (사용자 요청 2026-10-05: "과매도에 사야 되는 거 아냐? 테스트임") ──
+OVERSOLD = ["RSI<30 첫날", "RSI 30 재돌파", "스토캐스틱 과매도 골든크로스", "윌리엄스%R −80 재돌파", "과매도 3개 동시",
+            "RSI<30 첫날 + 시장 상승", "RSI 30 재돌파 + 시장 상승", "과매도 3개 동시 + 시장 상승"]
+
+
+def oversold_signals(df: pd.DataFrame, market_up: pd.Series) -> pd.DataFrame:
+    """과매도 진입 신호. market_up: 그날 SPY 종가 > SPY 200일선(시장 상승 추세, 임시 기준)."""
+    h, lo, c = df["High"], df["Low"], df["Close"]
+    r = rsi(c, 14)
+    st = stochastic(h, lo, c)
+    k, d = st["k"], st["d"]
+    wr = williams_r(h, lo, c)
+    up = market_up.reindex(df.index).fillna(False).astype(bool)
+    rsi_first = _fresh(r < RSI_LOW)
+    rsi_cross = ((r.shift(1) < RSI_LOW) & (r >= RSI_LOW)).fillna(False)
+    stoch_cross = ((k.shift(1) <= d.shift(1)) & (k > d) & (k.shift(1) < STOCH_LOW)).fillna(False)
+    wr_cross = ((wr.shift(1) < WR_LOW) & (wr >= WR_LOW)).fillna(False)
+    all3 = _fresh((r < RSI_LOW) & (k < STOCH_LOW) & (wr < WR_LOW))
+    cols = [rsi_first, rsi_cross, stoch_cross, wr_cross, all3, rsi_first & up, rsi_cross & up, all3 & up]
+    return pd.DataFrame(dict(zip(OVERSOLD, cols)), index=df.index).astype(bool)
