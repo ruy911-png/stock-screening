@@ -15,6 +15,7 @@ from pathlib import Path
 import pandas as pd
 
 FACTS_URL = "https://data.sec.gov/api/xbrl/companyfacts/CIK{cik:010d}.json"
+TICKERS_URL = "https://www.sec.gov/files/company_tickers.json"
 DEFAULT_UA = "stock-screening backtest research github.com/ruy911-png/stock-screening"
 ANNUAL_FORMS = ("10-K", "10-K/A", "10-KT", "10-KT/A")
 CACHE_DAYS = 7  # 받아 둔 재무는 일주일 안에서만 다시 쓴다(새 10-K 반영)
@@ -140,6 +141,23 @@ def fetch_companyfacts(cik: int, cache_dir: Path, user_agent: str = DEFAULT_UA, 
         break
     reason = f"HTTP {resp.status_code}" if resp is not None else last_error
     raise RuntimeError(f"SEC companyfacts 실패 CIK {cik}: {reason}")
+
+
+def fetch_company_tickers(cache_dir: Path, user_agent: str = DEFAULT_UA) -> dict:
+    """SEC 티커·CIK 표(company_tickers.json) 원본. CACHE_DAYS 동안 캐시."""
+    cache = Path(cache_dir) / "sec_company_tickers.json"
+    if cache.exists() and time.time() - cache.stat().st_mtime < CACHE_DAYS * 86400:
+        return json.loads(cache.read_text())
+    import requests
+
+    resp = requests.get(TICKERS_URL, headers={"User-Agent": user_agent}, timeout=60)
+    if resp.status_code == 403:
+        raise SecBlocked(f"SEC 403 (티커 표, User-Agent 연락처 {'있음' if '@' in user_agent else '없음'})")
+    resp.raise_for_status()
+    data = resp.json()
+    cache.parent.mkdir(parents=True, exist_ok=True)
+    cache.write_text(json.dumps(data))
+    return data
 
 
 def load_json_gz(path: Path) -> dict:

@@ -12,6 +12,13 @@
 | `run_bb_rsi.py` | 버핏 × 볼린저+RSI 조합(하단 이탈 + RSI<30, Method I 돌파 + RSI>50) | `results/bb_rsi.md`, `bb_rsi_stats.csv`, `bb_rsi_events.csv` |
 | `run_ma_cross.py` | 버핏 × 이동평균선 골든크로스 5/20·20/60·50/200, 각각 거래량 확인(직전 20일 평균 × 1.5) 유무 | `results/ma_cross.md`, `ma_cross_stats.csv`, `ma_cross_events.csv` |
 | `run_backtest.py` | 버핏 숫자 필터 × 볼린저 Method I·II·III(+ 참고 I+II) 신호의 5·10·20거래일 수익률 비교, 기준선(유니버스·버핏 통과 종목·SPY) | `results/backtest.md`, `backtest_stats.csv`, `backtest_events.csv`, `buffett_checkpoints.csv` |
+| `run_universe.py` | 위 다섯 묶음의 신호 전체를 러셀 1000에서 S&P 500·금융을 뺀 유니버스로 한 번에 — 전체 + 시총 상위 100, S&P 500 결과와 나란히 | `results/r1000x/summary.md`, `stats_all.csv`, `stats_top100.csv` (집계만) |
+
+### 러셀 1000(S&P 500 제외) 유니버스 목록
+- 출처: 사용자가 iShares IWB(러셀 1000 ETF) 보유종목 파일을 브라우저로 직접 내려받은 것. 파일의 저작권 고지(개인·비상업적 용도, 복사·배포·게시 금지)에 따라 **목록과 종목별 결과는 이 공개 저장소에 두지 않는다.**
+- `python make_universe_secret.py <파일> --out <저장소 밖 경로>` → 한 줄 문자열("티커:섹터코드,…", 비중 큰 순)을 Secret `R1000X_UNIVERSE`에 넣으면 `r1000x-experiment` 워크플로(수동 실행)가 받는다.
+- 제외: S&P 500과 같은 티커·주식 클래스·회사(SEC CIK), 금융 섹터, 권리·발행 전·비상장. 한 회사의 여러 클래스는 비중 큰 것 하나만. 시총 상위 100 = 제외 후 IWB 비중(유동주식 시가총액) 상위 100.
+- 버핏 필터의 업종 중앙값은 이 유니버스 안에서 계산한다(S&P 500 시험과 비교 집단이 다름).
 
 ## 실행
 ```

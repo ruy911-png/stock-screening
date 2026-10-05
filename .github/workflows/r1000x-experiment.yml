@@ -1,0 +1,62 @@
+# 시험용: 러셀 1000에서 S&P 500·금융을 뺀 유니버스로 방법 전체 백테스트 — 전체 + 시총 상위 100
+# (사용자 요청 2026-10-05: "나스닥은?" → "중복종목 빼고 러셀 1000" → "시총 100으로 해라")
+# 종목 목록은 iShares 파일의 저작권 고지(개인·비상업적 용도, 게시 금지) 때문에 공개 저장소에 두지 않고
+# Secret R1000X_UNIVERSE로만 받는다(만드는 법: experiments/backtest/make_universe_secret.py). 결과도 집계만 커밋한다.
+name: r1000x-experiment
+on:
+  workflow_dispatch:
+permissions:
+  contents: write
+concurrency:
+  group: r1000x-experiment
+  cancel-in-progress: false
+jobs:
+  run:
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    defaults:
+      run:
+        working-directory: experiments/backtest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - run: pip install -r requirements.txt
+      - name: 받아 둔 일봉·SEC 재무 다시 쓰기(일봉은 날짜별, 재무는 7일)
+        uses: actions/cache@v4
+        with:
+          path: experiments/backtest/.cache
+          key: bt-cache-${{ github.run_id }}
+          restore-keys: |
+            bt-cache-
+      - run: python -m pytest -q tests
+      - name: 러셀 1000(S&P 500·금융 제외) 백테스트
+        env:
+          SEC_USER_AGENT: ${{ secrets.SEC_USER_AGENT }}  # 비밀값(로그에서 가려짐)
+          R1000X_UNIVERSE: ${{ secrets.R1000X_UNIVERSE }}  # 비밀값(로그에서 가려짐) — "티커:섹터코드,…"
+        run: |
+          if [ -z "$R1000X_UNIVERSE" ]; then
+            echo "Secret R1000X_UNIVERSE가 없음 — Settings > Secrets and variables > Actions에 넣어야 함"; exit 1
+          fi
+          python run_universe.py --out results/r1000x
+      - name: 결과 커밋(집계만)
+        if: always()
+        run: |
+          # 결과는 매번 통째로 다시 만들므로, 최신 브랜치 위에 이번 결과를 덮어써서 올린다(충돌·실패를 숨기지 않음)
+          [ -d results/r1000x ] || { echo "결과 없음"; exit 1; }
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          tmp="$(mktemp -d)"
+          cp -r results/r1000x "$tmp/"
+          for i in 1 2 3; do
+            git fetch -q origin "${GITHUB_REF_NAME}"
+            git reset -q --hard "origin/${GITHUB_REF_NAME}"
+            rm -rf results/r1000x && cp -r "$tmp/r1000x" results/r1000x
+            git add -A results/r1000x
+            if git diff --cached --quiet; then echo "변경 없음"; exit 0; fi
+            git commit -q -m "러셀 1000(S&P 500·금융 제외) 백테스트 결과"
+            if git push -q origin "HEAD:${GITHUB_REF_NAME}"; then echo "결과 푸시 완료"; exit 0; fi
+            sleep 5
+          done
+          echo "결과 푸시 실패"; exit 1

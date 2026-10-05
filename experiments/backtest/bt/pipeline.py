@@ -25,11 +25,13 @@ class Market:
     splits: pd.DataFrame
     spy_fwd: pd.DataFrame
     spy: pd.Series
+    name: str = "sp500"
 
 
-def load_market(cache: Path, price_start: str, limit: int = 0) -> Market:
-    """S&P 500 현재 구성종목 중 금융 제외 + SPY 일봉."""
-    uni = load_universe(cache)
+def load_market(cache: Path, price_start: str, limit: int = 0, uni: pd.DataFrame | None = None,
+                name: str = "sp500") -> Market:
+    """유니버스(기본: S&P 500 현재 구성종목) 중 금융 제외 + SPY 일봉."""
+    uni = load_universe(cache) if uni is None else uni
     uni = uni[uni["sector"] != "Financials"]
     if limit:
         uni = uni.iloc[:limit]
@@ -43,7 +45,7 @@ def load_market(cache: Path, price_start: str, limit: int = 0) -> Market:
     splits = pd.DataFrame({s: prices[s]["Stock Splits"] for s in symbols}).reindex(closes.index)
     spy = spy.reindex(closes.index)
     spy_fwd = pd.DataFrame({h: btk.forward_returns(spy, h) for h in btk.HORIZONS})
-    return Market(uni, symbols, prices, failed, closes, splits, spy_fwd, spy)
+    return Market(uni, symbols, prices, failed, closes, splits, spy_fwd, spy, name)
 
 
 def buffett_mask(m: Market, cache: Path, start: pd.Timestamp):
@@ -51,7 +53,7 @@ def buffett_mask(m: Market, cache: Path, start: pd.Timestamp):
 
     같은 날·같은 종목·같은 기간이면 계산 결과를 캐시에서 다시 쓴다(한 실행의 여러 단계가 공유).
     """
-    key = f"{start:%Y%m%d}_{m.closes.index[-1]:%Y%m%d}_{len(m.symbols)}_{pd.Timestamp.today():%Y%m%d}"
+    key = f"{m.name}_{start:%Y%m%d}_{m.closes.index[-1]:%Y%m%d}_{len(m.symbols)}_{pd.Timestamp.today():%Y%m%d}"
     saved = Path(cache) / f"buffett_mask_{key}.pkl"
     if saved.exists():
         return pd.read_pickle(saved)
@@ -66,8 +68,12 @@ def _buffett_mask(m: Market, cache: Path, start: pd.Timestamp):
     ua = os.environ.get("SEC_USER_AGENT") or DEFAULT_UA
     rows, sec_missing, off = {}, [], None
     for s in m.symbols:
+        cik = m.uni.at[s, "cik"]
+        if pd.isna(cik):  # CIK를 못 찾은 종목은 재무 미확인
+            sec_missing.append(s)
+            continue
         try:
-            r = fetch_companyfacts(int(m.uni.at[s, "cik"]), cache, ua)
+            r = fetch_companyfacts(int(cik), cache, ua)
         except SecBlocked as e:  # 정책 차단: 남은 종목도 같으므로 바로 멈춘다
             print(e)
             off = f"SEC가 접근을 막음 — {e}"

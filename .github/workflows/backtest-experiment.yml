@@ -1,9 +1,7 @@
 # 시험용: experiments/backtest 실행 → 결과를 같은 브랜치에 커밋 (사용자 요청 2026-10-05, 실행 위치 = Actions)
+# 2026-10-05: 러셀 1000 시험을 위해 공용 코드(bt/)를 고칠 때 S&P 500 결과가 다시 계산되지 않도록 수동 실행만 둔다
 name: backtest-experiment
 on:
-  push:
-    branches: [test/backtest-sepa-buffett-bb]
-    paths: ["experiments/backtest/**", "!experiments/backtest/results/**", ".github/workflows/backtest-experiment.yml"]
   workflow_dispatch:
 permissions:
   contents: write
