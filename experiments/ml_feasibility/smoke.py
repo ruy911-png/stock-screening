@@ -11,7 +11,8 @@ import numpy as np
 import pandas as pd
 
 TICKERS = 'AAPL MSFT AMZN GOOGL NVDA META JNJ PFE XOM CVX KO PEP WMT COST HD CAT UNP IBM PG MCD'.split()
-H = 20
+H = 5
+THRESHOLD = 0.10
 FEATURES = ['ret1', 'ret5', 'ret20', 'ret60', 'vol20', 'vol60', 'volume_ratio',
             'ma20_gap', 'ma60_gap', 'ma200_gap', 'rsi14', 'bb_position',
             'body', 'upper_wick', 'lower_wick', 'range', 'spy20', 'spy60']
@@ -41,9 +42,11 @@ def features(df, spy):
     f['spy20'] = spy.pct_change(20, fill_method=None).reindex(c.index)
     f['spy60'] = spy.pct_change(60, fill_method=None).reindex(c.index)
     # Labels are deliberately separate from the explicit feature allowlist.
-    f['ret20_future'] = c.shift(-H)/c-1
+    future_high = pd.concat([hi.shift(-k) for k in range(1, H+1)], axis=1).max(axis=1, skipna=False)
+    f['max_upside_5d'] = future_high/c-1
+    f['ret5_close_future'] = c.shift(-H)/c-1
     f['target_date'] = pd.Series(c.index, index=c.index).shift(-H)
-    f['target'] = (f.ret20_future >= 0.05).astype(float).where(f.ret20_future.notna())
+    f['target'] = (f.max_upside_5d >= THRESHOLD-1e-12).astype(float).where(f.max_upside_5d.notna())
     return f.replace([np.inf, -np.inf], np.nan)
 
 
@@ -56,15 +59,23 @@ def split_data(data):
     assert len(train) > 1000 and len(valid) > 500 and len(test) > 500
     assert train.target_date.max() < valid.date.min()
     assert valid.target_date.max() < test.date.min()
-    assert set(FEATURES).isdisjoint({'target', 'target_date', 'ret20_future', 'ticker', 'date'})
+    assert set(FEATURES).isdisjoint({'target', 'target_date', 'max_upside_5d', 'ret5_close_future', 'ticker', 'date'})
     return train, valid, test
 
 
 def summarize(frame):
-    return {'n': len(frame), 'target_rate': float(frame.target.mean()),
-            'mean_return': float(frame.ret20_future.mean()),
-            'median_return': float(frame.ret20_future.median()),
-            'positive_rate': float((frame.ret20_future > 0).mean())}
+    return {'n': len(frame), 'hits': int(frame.target.sum()),
+            'hit_rate_5d_10pct': float(frame.target.mean()),
+            'mean_close_return_5d': float(frame.ret5_close_future.mean()),
+            'median_close_return_5d': float(frame.ret5_close_future.median()),
+            'positive_close_rate_5d': float((frame.ret5_close_future > 0).mean())}
+
+
+def select_daily(frame, column):
+    selected_idx = []
+    for _, group in frame.groupby('date', sort=True):
+        selected_idx.extend(group.nlargest(max(1, math.ceil(len(group)*0.1)), column).index.tolist())
+    return frame.loc[selected_idx].copy()
 
 
 def main():
@@ -109,12 +120,15 @@ def main():
         f = features(d, spy)
         f['ticker'] = ticker
         f['date'] = f.index
-        frames.append(f.dropna(subset=FEATURES+['target','target_date','ret20_future']))
+        frames.append(f.dropna(subset=FEATURES+['target','target_date','ret5_close_future']))
     data = pd.concat(frames, ignore_index=True).sort_values(['date','ticker'])
     if data.ticker.nunique() < 15:
         raise RuntimeError(f'Only {data.ticker.nunique()} usable symbols; need 15')
     data.to_csv(out/'dataset.csv', index=False)
     train, valid, test = split_data(data)
+    for name, frame in [('train', train), ('validation', valid), ('test', test)]:
+        if frame.target.nunique() != 2:
+            raise RuntimeError(f'{name} must have both positive and negative labels')
     print(f'STAGE data_ready symbols={data.ticker.nunique()} rows={len(data)} train={len(train)} validation={len(valid)} test={len(test)}', flush=True)
     model = lgb.LGBMClassifier(n_estimators=400, learning_rate=0.04, num_leaves=15,
                               max_depth=-1, min_child_samples=100, reg_lambda=2,
@@ -130,16 +144,30 @@ def main():
     inference_seconds = time.perf_counter()-begin
     assert np.isfinite(test.score).all() and test.score.between(0,1).all()
     # Select within each day. No portfolio, cooldown or statistical significance claim.
-    selected_idx = []
-    for _, group in test.groupby('date',sort=True):
-        selected_idx.extend(group.nlargest(max(1,math.ceil(len(group)*0.1)), 'score').index.tolist())
-    selected = test.loc[selected_idx]
+    selected = select_daily(test, 'score')
+    comparators = {'baseline_all_days': test, 'model_daily_top10pct': selected,
+                   'vol20_daily_top10pct': select_daily(test, 'vol20'),
+                   'vol60_daily_top10pct': select_daily(test, 'vol60'),
+                   'rsi_below30_state': test[test.rsi14<30]}
+    ticker_rows = []
+    for ticker, group in test.groupby('ticker'):
+        chosen = selected[selected.ticker == ticker]
+        ticker_rows.append({'ticker': ticker, **summarize(chosen),
+                            'baseline_n': len(group),
+                            'baseline_hit_rate_5d_10pct': float(group.target.mean()),
+                            'baseline_mean_close_return_5d': float(group.ret5_close_future.mean())})
+    pd.DataFrame(ticker_rows).to_csv(out/'per_ticker.csv', index=False)
+    selected.to_csv(out/'selected_predictions.csv', index=False)
     baseline_p = float(train.target.mean())
     result = {
         'purpose':'real-price LightGBM smoke test; not calibrated probabilities or proven alpha',
+        'target_definition': 'Any high on t+1 through t+5 >= 1.10 times close on t; t high excluded',
+        'return_definition': 'Separate close-to-close return from t to t+5; not a take-profit simulation',
         'python':platform.python_version(), 'lightgbm':lgb.__version__, 'sklearn':sklearn.__version__,
         'symbols':int(data.ticker.nunique()), 'excluded':excluded, 'features':FEATURES,
         'rows':len(data), 'train_rows':len(train), 'validation_rows':len(valid), 'test_rows':len(test),
+        'train_hits':int(train.target.sum()), 'validation_hits':int(valid.target.sum()),
+        'test_hits':int(test.target.sum()),
         'train_last_target':str(train.target_date.max().date()),
         'validation_first_entry':str(valid.date.min().date()),
         'validation_last_target':str(valid.target_date.max().date()),
@@ -150,10 +178,12 @@ def main():
         'auc':float(roc_auc_score(test.target,test.score)),
         'brier':float(brier_score_loss(test.target,test.score)),
         'constant_train_rate_brier':float(brier_score_loss(test.target,np.full(len(test),baseline_p))),
-        'baseline_all_days':summarize(test), 'model_daily_top10pct':summarize(selected),
-        'rsi_below30_state':summarize(test[test.rsi14<30]),
+        **{name:summarize(frame) for name,frame in comparators.items()},
         'limitations':['Hand-picked current large-cap survivors; not all S&P500',
-                       'Overlapping 20-day outcomes; no inferential significance claim',
+                       'Overlapping 5-day outcomes; no inferential significance claim',
+                       '2024+ test period was previously inspected for a different target; exploratory only',
+                       'Intraday high touch is not a guaranteed fill or a realized 10 percent return',
+                       'Signal-close reference assumes end-of-day information; not an executable fill model',
                        'Uncalibrated scores; corporate actions not exhaustively verified',
                        'No cooldown; RSI comparison is state, not previous first-day strategy',
                        'Split-adjusted price returns exclude dividends and costs']}
