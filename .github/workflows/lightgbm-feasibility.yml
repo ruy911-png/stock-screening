@@ -1,4 +1,4 @@
-name: LightGBM feasibility smoke test
+name: Small-cap random 20 LightGBM test
 on:
   push:
     branches: [test/lightgbm-feasibility-20261006]
@@ -20,12 +20,12 @@ jobs:
         run: python -m pip install 'numpy>=1.26,<3' 'pandas>=2,<4' 'scikit-learn>=1.4,<2' 'lightgbm>=4,<5' 'yfinance>=0.2,<2'
       - name: Validate features and temporal split
         run: python -m unittest discover -s experiments/ml_feasibility -p 'test_*.py' -v
-      - name: Train and predict on real daily prices
-        run: python -u experiments/ml_feasibility/smoke.py
+      - name: Draw small-cap sample and train on real daily prices
+        run: python -u experiments/ml_feasibility/smallcap.py
       - uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: lightgbm-feasibility-results
-          path: experiments/ml_feasibility/results/
+          name: smallcap-random20-results
+          path: experiments/ml_feasibility/results_smallcap/
           if-no-files-found: warn
           retention-days: 7

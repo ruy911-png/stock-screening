@@ -78,43 +78,49 @@ def select_daily(frame, column):
     return frame.loc[selected_idx].copy()
 
 
-def main():
+def main(tickers=None, raw=None, outdir=None, metadata=None, quarantine=True):
     import lightgbm as lgb
     import sklearn
     from sklearn.metrics import roc_auc_score, brier_score_loss
     import yfinance as yf
 
     started = time.perf_counter()
-    out = Path('experiments/ml_feasibility/results')
+    tickers = list(TICKERS if tickers is None else tickers)
+    out = Path('experiments/ml_feasibility/results' if outdir is None else outdir)
     out.mkdir(parents=True, exist_ok=True)
     print('STAGE data_download', flush=True)
-    raw = yf.download(TICKERS+['SPY'], start='2014-01-01', end='2026-10-03',
-                      auto_adjust=False, actions=True, group_by='ticker', threads=4,
-                      progress=False, timeout=20)
+    if raw is None:
+        raw = yf.download(tickers+['SPY'], start='2014-01-01', end='2026-10-03',
+                          auto_adjust=False, actions=True, group_by='ticker', threads=4,
+                          progress=False, timeout=20)
     if raw is None or raw.empty:
         raise RuntimeError('No real market data received; synthetic fallback is prohibited')
     raw.to_csv(out/'ohlcv.csv')
     prices = {}
-    for ticker in TICKERS+['SPY']:
+    for ticker in tickers+['SPY']:
         if ticker not in raw.columns.get_level_values(0):
             continue
         d = raw[ticker].copy()
         d.index = pd.DatetimeIndex(d.index).tz_localize(None).normalize()
-        if d.Close.notna().sum() >= 1000:
+        if d.Close.notna().sum() >= (1000 if quarantine else 1):
             prices[ticker] = d
     if 'SPY' not in prices:
         raise RuntimeError('SPY missing')
     calendar = prices['SPY'].Close.dropna().index
     spy = prices['SPY'].Close.reindex(calendar)
-    frames, excluded = [], {}
-    for ticker in TICKERS:
+    frames, excluded, price_flags = [], {}, []
+    for ticker in tickers:
         if ticker not in prices:
             excluded[ticker] = 'missing or insufficient prices'
             continue
         d = prices[ticker].reindex(calendar)
         ratios = d.Close.pct_change(fill_method=None)
         # Diagnostic quarantine, not proof all remaining corporate actions are clean.
-        if ((ratios > 1) | (ratios < -0.6)).any():
+        extreme = ratios[(ratios > 1) | (ratios < -0.6)]
+        for date, change in extreme.items():
+            price_flags.append({'ticker': ticker, 'date': str(date.date()),
+                                'daily_close_return': float(change)})
+        if quarantine and len(extreme):
             excluded[ticker] = 'large daily discontinuity needs corporate-action review'
             continue
         f = features(d, spy)
@@ -122,6 +128,8 @@ def main():
         f['date'] = f.index
         frames.append(f.dropna(subset=FEATURES+['target','target_date','ret5_close_future']))
     data = pd.concat(frames, ignore_index=True).sort_values(['date','ticker'])
+    if metadata is not None and set(data.ticker.unique()) != set(tickers):
+        raise RuntimeError('Preselected sample changed; investigate missing data without redrawing')
     if data.ticker.nunique() < 15:
         raise RuntimeError(f'Only {data.ticker.nunique()} usable symbols; need 15')
     data.to_csv(out/'dataset.csv', index=False)
@@ -165,6 +173,7 @@ def main():
         'return_definition': 'Separate close-to-close return from t to t+5; not a take-profit simulation',
         'python':platform.python_version(), 'lightgbm':lgb.__version__, 'sklearn':sklearn.__version__,
         'symbols':int(data.ticker.nunique()), 'excluded':excluded, 'features':FEATURES,
+        'tickers':tickers, 'sample_metadata':metadata, 'extreme_return_review_flags':price_flags,
         'rows':len(data), 'train_rows':len(train), 'validation_rows':len(valid), 'test_rows':len(test),
         'train_hits':int(train.target.sum()), 'validation_hits':int(valid.target.sum()),
         'test_hits':int(test.target.sum()),
@@ -172,6 +181,10 @@ def main():
         'validation_first_entry':str(valid.date.min().date()),
         'validation_last_target':str(valid.target_date.max().date()),
         'test_first_entry':str(test.date.min().date()), 'test_last_entry':str(test.date.max().date()),
+        'test_dates':int(test.date.nunique()),
+        'test_symbols_per_day_min':int(test.groupby('date').ticker.nunique().min()),
+        'test_symbols_per_day_max':int(test.groupby('date').ticker.nunique().max()),
+        'test_rows_per_ticker':{str(k):int(v) for k,v in test.groupby('ticker').size().items()},
         'best_iteration':model.best_iteration_, 'training_seconds':training_seconds,
         'inference_seconds':inference_seconds, 'total_seconds':time.perf_counter()-started,
         'peak_rss_mb':resource.getrusage(resource.RUSAGE_SELF).ru_maxrss/1024,
@@ -179,7 +192,8 @@ def main():
         'brier':float(brier_score_loss(test.target,test.score)),
         'constant_train_rate_brier':float(brier_score_loss(test.target,np.full(len(test),baseline_p))),
         **{name:summarize(frame) for name,frame in comparators.items()},
-        'limitations':['Hand-picked current large-cap survivors; not all S&P500',
+        'limitations':[('Random sample of current IWM survivors with pre-2022 training history; not a historical small-cap universe'
+                        if metadata is not None else 'Hand-picked current large-cap survivors; not all S&P500'),
                        'Overlapping 5-day outcomes; no inferential significance claim',
                        '2024+ test period was previously inspected for a different target; exploratory only',
                        'Intraday high touch is not a guaranteed fill or a realized 10 percent return',
