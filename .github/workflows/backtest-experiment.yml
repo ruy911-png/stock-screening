@@ -1,0 +1,77 @@
+# 시험용: experiments/backtest 실행 → 결과를 같은 브랜치에 커밋 (사용자 요청 2026-10-05, 실행 위치 = Actions)
+# 2026-10-05: 러셀 1000 시험을 위해 공용 코드(bt/)를 고칠 때 S&P 500 결과가 다시 계산되지 않도록 수동 실행만 둔다
+name: backtest-experiment
+on:
+  workflow_dispatch:
+permissions:
+  contents: write
+concurrency:
+  group: backtest-experiment
+  cancel-in-progress: false  # 새 푸시는 진행 중인 실행을 취소하지 않고 끝날 때까지 기다린다
+jobs:
+  run:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    defaults:
+      run:
+        working-directory: experiments/backtest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - run: pip install -r requirements.txt
+      - name: 받아 둔 일봉·SEC 재무 다시 쓰기(일봉은 날짜별, 재무는 7일)
+        uses: actions/cache@v4
+        with:
+          path: experiments/backtest/.cache
+          key: bt-cache-${{ github.run_id }}
+          restore-keys: |
+            bt-cache-
+      - run: python -m pytest -q tests
+      - name: SEPA 실행 확인
+        continue-on-error: true  # 검산 불일치여도 백테스트는 계속, 내용은 results/sepa_screen.md
+        run: python run_sepa.py --out results
+      - name: 버핏 x 볼린저 백테스트
+        env:
+          SEC_USER_AGENT: ${{ secrets.SEC_USER_AGENT }}  # 비밀값(로그에서 가려짐) — "이름 이메일"
+        run: python run_backtest.py --out results
+      - name: 버핏 x 과매수·과매도(RSI·스토캐스틱·윌리엄스 %R)
+        continue-on-error: true
+        env:
+          SEC_USER_AGENT: ${{ secrets.SEC_USER_AGENT }}
+        run: python run_oscillators.py --out results  # SEC·일봉은 앞 단계 캐시를 다시 씀
+      - name: 과매도 매수 진입 변형(버핏 유무, 시장 상승 조건)
+        continue-on-error: true
+        env:
+          SEC_USER_AGENT: ${{ secrets.SEC_USER_AGENT }}
+        run: python run_oversold.py --out results
+      - name: 버핏 x 볼린저+RSI 조합
+        continue-on-error: true
+        env:
+          SEC_USER_AGENT: ${{ secrets.SEC_USER_AGENT }}
+        run: python run_bb_rsi.py --out results
+      - name: 버핏 x 이동평균선 골든크로스(+ 거래량)
+        continue-on-error: true
+        env:
+          SEC_USER_AGENT: ${{ secrets.SEC_USER_AGENT }}
+        run: python run_ma_cross.py --out results
+      - name: 결과 커밋
+        if: always()
+        run: |
+          # 결과 파일은 매번 통째로 다시 만들므로, 최신 브랜치 위에 이번 결과를 덮어써서 올린다(충돌·실패를 숨기지 않음)
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          tmp="$(mktemp -d)"
+          cp -r results "$tmp/"
+          for i in 1 2 3; do
+            git fetch -q origin "${GITHUB_REF_NAME}"
+            git reset -q --hard "origin/${GITHUB_REF_NAME}"
+            rm -rf results && cp -r "$tmp/results" results
+            git add -A results
+            if git diff --cached --quiet; then echo "변경 없음"; exit 0; fi
+            git commit -q -m "시험 결과 갱신 (backtest-experiment)"
+            if git push -q origin "HEAD:${GITHUB_REF_NAME}"; then echo "결과 푸시 완료"; exit 0; fi
+            sleep 5
+          done
+          echo "결과 푸시 실패"; exit 1

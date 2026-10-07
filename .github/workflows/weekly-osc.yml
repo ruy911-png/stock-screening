@@ -1,0 +1,46 @@
+# 시험용: 주봉 스토캐스틱(15,5,5) + 윌리엄스 %R 동시 과매도 재현 (사용자 참고 자료 2026-10-05)
+name: weekly-osc
+on:
+  push:
+    branches: [test/backtest-sepa-buffett-bb]
+    paths: ["experiments/weekly/**", "!experiments/weekly/results/**", ".github/workflows/weekly-osc.yml"]
+  workflow_dispatch:
+permissions:
+  contents: write
+concurrency:
+  group: weekly-osc
+  cancel-in-progress: false
+jobs:
+  run:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    defaults:
+      run:
+        working-directory: experiments/weekly
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - run: pip install -r ../backtest/requirements.txt
+      - run: python -m pytest -q tests
+      - name: 주봉 재현 시험
+        run: python run_weekly_osc.py --out results
+      - name: 결과 커밋
+        if: always()
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          tmp="$(mktemp -d)"
+          cp -r results "$tmp/"
+          for i in 1 2 3; do
+            git fetch -q origin "${GITHUB_REF_NAME}"
+            git reset -q --hard "origin/${GITHUB_REF_NAME}"
+            rm -rf results && cp -r "$tmp/results" results
+            git add -A results
+            if git diff --cached --quiet; then echo "변경 없음"; exit 0; fi
+            git commit -q -m "주봉 재현 시험 결과 (weekly-osc)"
+            if git push -q origin "HEAD:${GITHUB_REF_NAME}"; then echo "결과 푸시 완료"; exit 0; fi
+            sleep 5
+          done
+          echo "결과 푸시 실패"; exit 1

@@ -1,0 +1,84 @@
+import numpy as np
+import pandas as pd
+import pytest
+
+from bt.oscillators import rsi, signals, stochastic, williams_r
+
+
+def test_rsi_matches_wilder_hand_calculation():
+    close = pd.Series([10.0, 11, 12, 11, 12, 13])
+    out = rsi(close, 3)
+    # 변화: +1 +1 −1 +1 +1 → 첫 평균(3개): 이득 2/3, 손실 1/3
+    ag, al = 2 / 3, 1 / 3
+    assert out.iloc[3] == pytest.approx(100 - 100 / (1 + ag / al))
+    ag, al = (ag * 2 + 1) / 3, (al * 2 + 0) / 3   # 4번째 변화 +1
+    assert out.iloc[4] == pytest.approx(100 - 100 / (1 + ag / al))
+    assert out.iloc[:3].isna().all()
+
+
+def test_rsi_extremes():
+    up = pd.Series(np.arange(1.0, 31.0))
+    assert rsi(up, 14).iloc[-1] == 100.0
+    assert rsi(up[::-1].reset_index(drop=True), 14).iloc[-1] == pytest.approx(0.0)
+    assert rsi(pd.Series([5.0] * 20), 14).iloc[-1] == 50.0
+
+
+def test_stochastic_and_williams_relationship():
+    rng = np.random.default_rng(3)
+    c = pd.Series(100 + rng.normal(0, 1, 80).cumsum())
+    h, lo = c + 1, c - 1
+    st = stochastic(h, lo, c)
+    wr = williams_r(h, lo, c)
+    # 윌리엄스 %R = 빠른 %K − 100
+    both = pd.concat([st["fast_k"] - 100, wr], axis=1).dropna()
+    assert np.allclose(both.iloc[:, 0], both.iloc[:, 1])
+    # 느린 %K = 빠른 %K 3일 평균
+    assert st["k"].iloc[-1] == pytest.approx(st["fast_k"].iloc[-3:].mean())
+    assert ((wr.dropna() <= 0) & (wr.dropna() >= -100)).all()
+
+
+def test_oversold_signal_fires_once_on_first_day(ohlcv):
+    closes = [100.0 + (i % 2) for i in range(40)] + [99 - 2 * i for i in range(10)]
+    df = ohlcv(closes)
+    sig = signals(df)
+    r = rsi(df["Close"], 14)
+    first = int(np.argmax((r < 30).to_numpy()))
+    assert sig["RSI<30"].sum() == 1 and sig["RSI<30"].iloc[first]
+    assert not sig["RSI>70"].iloc[40:].any()
+
+
+def test_oversold_cross_signals(ohlcv):
+    from bt.oscillators import oversold_signals
+
+    closes = [100.0 + (i % 2) for i in range(40)] + [99 - 2 * i for i in range(10)] + [81 + 3 * i for i in range(10)]
+    df = ohlcv(closes)
+    up = pd.Series(True, index=df.index)
+    sig = oversold_signals(df, up)
+    r = rsi(df["Close"], 14)
+    cross = int(np.argmax(((r.shift(1) < 30) & (r >= 30)).to_numpy()))
+    assert sig["RSI 30 재돌파"].iloc[cross] and sig["RSI 30 재돌파"].sum() == 1
+    assert int(np.argmax(sig["RSI<30 첫날"].to_numpy())) < cross          # 먼저 내려가고 나중에 재돌파
+    down = pd.Series(False, index=df.index)
+    assert not oversold_signals(df, down)["RSI 30 재돌파 + 시장 상승"].any()  # 시장 하락 추세면 신호 없음
+
+
+def test_bb_rsi_signals(ohlcv):
+    from bt.bollinger_methods import add_indicators, method1
+    from bt.oscillators import bb_rsi_signals
+
+    # 하단 이탈 + RSI<30: 잔잔하다 급락
+    closes = [100.0 + (i % 2) for i in range(40)] + [99 - 2 * i for i in range(8)]
+    df = ohlcv(closes)
+    s = bb_rsi_signals(df)
+    r = rsi(df["Close"], 14)
+    t = int(np.argmax(s["BB 하단 이탈 + RSI<30"].to_numpy()))
+    ind = add_indicators(df)
+    assert s["BB 하단 이탈 + RSI<30"].sum() == 1 and ind["pctb"].iloc[t] < 0 and r.iloc[t] < 30
+    # I 돌파 + RSI>50: Squeeze 뒤 상단 돌파일, 그날 RSI가 50 초과면 신호
+    rng = np.random.default_rng(1)
+    base = list(100 + rng.normal(0, 1, 180).cumsum() * 0.3 + rng.normal(0, 1, 180))
+    closes = base + [100.0 + (i % 2) * 0.1 for i in range(30)] + [106.0]
+    df = ohlcv(closes)
+    s = bb_rsi_signals(df)
+    assert method1(add_indicators(df)).iloc[-1] and s["BB I 돌파"].iloc[-1]
+    assert s["BB I 돌파 + RSI>50"].iloc[-1] == (rsi(df["Close"], 14).iloc[-1] > 50)

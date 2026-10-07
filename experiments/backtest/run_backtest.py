@@ -1,0 +1,162 @@
+"""버핏 숫자 필터 × 볼린저 Method I·II·III 백테스트 (미장, S&P 500 현재 구성종목 중 금융 제외).
+
+결과는 스크리닝 결과(통계용)이며 매수·매도 권유가 아니다. 임시값·한계는 README.md.
+"""
+from __future__ import annotations
+
+import argparse
+import sys
+import time
+from pathlib import Path
+
+import pandas as pd
+
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+
+from bt import backtest as btk  # noqa: E402
+from bt.bollinger_methods import METHODS, add_indicators, signals  # noqa: E402
+from bt.buffett import CRITERIA  # noqa: E402
+from bt.pipeline import buffett_mask, load_market  # noqa: E402
+
+
+def pct(x, digits=2, sign=True):
+    if x is None or pd.isna(x):
+        return "—"
+    return f"{x * 100:+.{digits}f}%" if sign else f"{x * 100:.{digits}f}%"
+
+
+def main() -> int:
+    ap = argparse.ArgumentParser()
+    ap.add_argument("--out", default="results")
+    ap.add_argument("--cache", default=".cache")
+    ap.add_argument("--price-start", default="2010-01-01")
+    ap.add_argument("--start", default="2016-01-01", help="신호 집계 시작일")
+    ap.add_argument("--limit", type=int, default=0, help="시험용: 앞 N종목만")
+    args = ap.parse_args()
+    out, cache = Path(args.out), Path(args.cache)
+    out.mkdir(parents=True, exist_ok=True)
+    t0 = time.time()
+
+    mk = load_market(cache, args.price_start, args.limit)
+    symbols, prices, failed, closes = mk.symbols, mk.prices, mk.failed, mk.closes
+    spy_fwd = mk.spy_fwd
+
+    # 기간: 신호는 [start, 마지막 거래일 − 20거래일]
+    start = pd.Timestamp(args.start)
+    last_entry = closes.index[-1 - max(btk.HORIZONS)]
+
+    # 버핏: SEC 재무 → 제출일별 지표 → 월말 체크포인트 판정 → 거래일 마스크 (못 쓰면 볼린저만 진행)
+    mask, records, buffett_off, sec_missing = buffett_mask(mk, cache, start)
+
+    # 볼린저 신호 → 이벤트 (버핏 필터를 못 쓰면 볼린저 단독만)
+    order = [f"BB-{m}" for m in METHODS] + ([f"버핏+BB-{m}" for m in METHODS] if mask is not None else [])
+    evs = []
+    for s in symbols:
+        ind = add_indicators(prices[s][["Open", "High", "Low", "Close", "Volume"]])
+        sig = signals(ind)
+        for m in METHODS:
+            evs.append(btk.events(s, ind["Close"], sig[m], spy_fwd, f"BB-{m}", start, last_entry))
+            if mask is not None:
+                evs.append(btk.events(s, ind["Close"], sig[m] & mask[s].reindex(ind.index, fill_value=False),
+                                      spy_fwd, f"버핏+BB-{m}", start, last_entry))
+    ev = pd.concat([e for e in evs if len(e)], ignore_index=True)
+    ev.to_csv(out / "backtest_events.csv", index=False)
+    stats = btk.stats_table(ev, order)
+
+    # 기준선: 아무 날이나 (유니버스 전체 / 버핏 통과 종목 / SPY)
+    base_rows = []
+    bases = [("기준선: 유니버스 아무 날", None)] + ([("기준선: 버핏 통과 종목 아무 날", mask)] if mask is not None else [])
+    for name, m in bases:
+        allday = btk.all_day_returns(closes, m, spy_fwd, start, last_entry)
+        for h in btk.HORIZONS:
+            base_rows.append({"strategy": name, "h": h, **btk.summarize(allday[h]["ret"], allday[h]["ex"])})
+    win = (spy_fwd.index >= start) & (spy_fwd.index <= last_entry)
+    for h in btk.HORIZONS:
+        r = spy_fwd[h][win]
+        base_rows.append({"strategy": "기준선: SPY 아무 날", "h": h, **btk.summarize(r, r * float("nan"))})
+    stats = pd.concat([stats, pd.DataFrame(base_rows)], ignore_index=True)
+    stats.to_csv(out / "backtest_stats.csv", index=False)
+    yearly_mean, yearly_n = btk.yearly_table(ev, order)
+
+    # 버핏 필터 진단: 연도별 평균 통과 종목 수, 조건별 미확인 비율
+    qual_by_year, unknown, passed_share = pd.Series(dtype=float), {}, {}
+    if len(records):
+        rec = records.copy()
+        rec["year"] = pd.to_datetime(rec["checkpoint"]).dt.year
+        qual_by_year = rec.groupby("year")["qualified"].sum() / rec.groupby("year")["checkpoint"].nunique()
+        unknown = {k: float(rec[k].isna().mean()) for k in CRITERIA}
+        passed_share = {k: float((rec[k] == True).mean()) for k in CRITERIA}  # noqa: E712
+        rec.to_csv(out / "buffett_checkpoints.csv", index=False)
+
+    h_main = 20
+    main_rows = stats[stats["h"] == h_main]
+    prefix = "버핏+BB-" if mask is not None else "BB-"
+    best = main_rows[main_rows["strategy"].isin([f"{prefix}{m}" for m in ("I", "II", "III")])]
+    best = best[best["n"] > 0].sort_values("mean", ascending=False)
+
+    def table(h):
+        sub = stats[stats["h"] == h]
+        lines = ["| 전략 | 건수 | 신호일 수 | 평균 | 중앙값 | 상승 비율 | SPY 대비 평균 | SPY보다 나은 비율 | 표준오차 |",
+                 "|---|---:|---:|---:|---:|---:|---:|---:|---:|"]
+        for _, r in sub.iterrows():
+            nd = "—" if pd.isna(r.get("n_dates")) else int(r["n_dates"])
+            lines.append(f"| {r['strategy']} | {int(r['n'])} | {nd} | {pct(r.get('mean'))} | {pct(r.get('median'))} | "
+                         f"{pct(r.get('win'), 1, False)} | {pct(r.get('ex_mean'))} | {pct(r.get('ex_win'), 1, False)} | "
+                         f"{pct(r.get('se'), 2, False)} |")
+        return lines
+
+    lines = [
+        "# 버핏 × 볼린저 Method I·II·III 백테스트 — 스크리닝 결과(통계용)",
+        "",
+        f"- 신호 기간: {start:%Y-%m-%d} ~ {last_entry:%Y-%m-%d} (마지막 일봉 {closes.index[-1]:%Y-%m-%d})",
+        f"- 유니버스: S&P 500 현재 구성종목 중 금융 제외 {len(symbols)}종목 (일봉 못 받음 {len(failed)}: {', '.join(failed) or '없음'})",
+        (f"- **버핏 필터 미실행** — {buffett_off}. 아래는 볼린저 단독 결과만" if buffett_off else
+         f"- SEC 재무 없음 {len(sec_missing)}종목: {', '.join(sec_missing) or '없음'} → 버핏 필터 미통과로 처리"),
+        "- 수익률: 신호일 종가 → 5·10·20거래일 뒤 종가 (분할 보정, 배당 미포함). 같은 종목·전략은 신호 뒤 20거래일 동안 새 신호 안 셈",
+        *(["- 버핏 필터: 명세 §3의 숫자 조건(해자 LLM 판단 제외), 그 시점에 제출된 10-K 값만 사용, 월말 판정 → 다음 날부터 적용"]
+          if mask is not None else []),
+        "- 볼린저: I 변동성 돌파 · II 추세 추종(%b>0.8·MFI(10)>80) · III 반전(W-bottom 단순화) · I+II(Q41 기본안, 참고)",
+        "- 매수·매도 권유가 아니다. 임시값·한계는 README.md",
+        "",
+        f"## {h_main}거래일 수익률",
+        *table(h_main),
+        "",
+        "## 10거래일 수익률",
+        *table(10),
+        "",
+        "## 5거래일 수익률",
+        *table(5),
+        "",
+        f"## {'버핏+볼린저' if mask is not None else '볼린저 단독(버핏 필터 미실행)'} {h_main}거래일 평균 순위 (I·II·III)",
+        *[f"{i + 1}. {r['strategy']}: 평균 {pct(r['mean'])}, 중앙값 {pct(r['median'])}, 건수 {int(r['n'])}, "
+          f"SPY 대비 {pct(r['ex_mean'])}" for i, (_, r) in enumerate(best.iterrows())],
+        "",
+        f"## 연도별 {h_main}거래일 평균 수익률 (괄호: 건수)",
+    ]
+    if len(yearly_mean):
+        cols = list(yearly_mean.columns)
+        lines += ["| 연도 | " + " | ".join(cols) + " |", "|---|" + "---:|" * len(cols)]
+        for y in yearly_mean.index:
+            cells = [f"{pct(yearly_mean.at[y, c], 1)} ({int(yearly_n.at[y, c]) if not pd.isna(yearly_n.at[y, c]) else 0})"
+                     for c in cols]
+            lines.append(f"| {y} | " + " | ".join(cells) + " |")
+    if passed_share:
+        lines += [
+            "",
+            "## 버핏 필터 진단",
+            "| 연도 | 월말 평균 통과 종목 수 |",
+            "|---|---:|",
+            *[f"| {y} | {v:.1f} |" for y, v in qual_by_year.items()],
+            "",
+            "| 조건 | 충족 비율 | 미확인 비율 |",
+            "|---|---:|---:|",
+            *[f"| {k} {label} | {passed_share[k]:.1%} | {unknown[k]:.1%} |" for k, label in CRITERIA.items()],
+        ]
+    lines += ["", f"- 실행 시간 {time.time() - t0:.0f}초"]
+    (out / "backtest.md").write_text("\n".join(lines) + "\n", encoding="utf-8")
+    print("\n".join(lines))
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())
