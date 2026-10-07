@@ -5,7 +5,7 @@ from datetime import datetime, timezone
 import numpy as np
 import pandas as pd
 
-from korea_cosmetics import build_frame, clean_prices, completed_date, live_partitions, mature_rows
+from korea_cosmetics import build_frame, clean_prices, completed_date, live_partitions, mature_rows, parse_naver_chart
 
 
 def prices(n=350):
@@ -16,6 +16,20 @@ def prices(n=350):
 
 
 class KoreanBoundaryTests(unittest.TestCase):
+    def test_naver_parser_preserves_missing_date_and_ohlcv_order(self):
+        xml = '<protocol><chartdata><item data="20261002|100|111|99|105|12345"/><item data="20261006|105|112|104|110|23456"/></chartdata></protocol>'
+        f = parse_naver_chart(xml)
+        self.assertEqual(len(f), 2)
+        self.assertNotIn(pd.Timestamp('2026-10-05'), f.index)
+        self.assertEqual(f.loc['2026-10-06', 'Close'], 110)
+        self.assertEqual(f.loc['2026-10-06', 'Volume'], 23456)
+        self.assertEqual(f.loc['2026-10-02', 'High'], 111)
+
+    def test_naver_duplicate_dates_fail_instead_of_silent_overwrite(self):
+        xml = '<protocol><item data="20261006|100|111|99|105|12345"/><item data="20261006|105|112|104|110|23456"/></protocol>'
+        with self.assertRaisesRegex(ValueError, 'Duplicate'):
+            parse_naver_chart(xml)
+
     def test_completed_date_uses_korean_close_buffer(self):
         self.assertEqual(str(completed_date(datetime(2026, 10, 7, 0, 30, tzinfo=timezone.utc))), '2026-10-06')
         self.assertEqual(str(completed_date(datetime(2026, 10, 7, 7, 0, tzinfo=timezone.utc))), '2026-10-07')

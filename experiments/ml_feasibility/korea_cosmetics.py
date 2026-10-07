@@ -3,6 +3,9 @@ from pathlib import Path
 from datetime import datetime, timedelta
 from zoneinfo import ZoneInfo
 import argparse
+import ast
+from concurrent.futures import ThreadPoolExecutor, as_completed
+import xml.etree.ElementTree as ET
 import json
 import os
 import time
@@ -19,6 +22,110 @@ PARAMETERS = dict(n_estimators=400, learning_rate=0.04, num_leaves=15,
                   deterministic=True, force_col_wise=True)
 MIN_TURNOVER = 1_000_000_000  # KRW 10억원, average of latest 20 sessions.
 PRICE_FIELDS = ['Open', 'High', 'Low', 'Close', 'Volume']
+
+
+
+def parse_naver_chart(payload):
+    """Parse the publisher's OHLCV observations, with no missing-date imputation."""
+    root = ET.fromstring(payload)
+    rows = []
+    for item in root.iter('item'):
+        values = item.attrib.get('data', '').split('|')
+        if len(values) < 6:
+            raise ValueError('Malformed Naver chart observation')
+        rows.append([values[0], *[float(x) for x in values[1:6]]])
+    if not rows:
+        raise ValueError('Naver chart contained no price observations')
+    frame = pd.DataFrame(rows, columns=['date', *PRICE_FIELDS])
+    frame['date'] = pd.to_datetime(frame.date, format='%Y%m%d')
+    if frame.date.duplicated().any():
+        raise ValueError('Duplicate dates in Naver chart')
+    return frame.set_index('date').sort_index()
+
+
+def fetch_naver(ticker, limit, out):
+    import requests
+    code = ticker.split('.')[0]
+    headers = {'User-Agent': 'Mozilla/5.0', 'Referer': 'https://finance.naver.com/'}
+    urls = [f'https://fchart.stock.naver.com/sise.nhn?symbol={code}&timeframe=day&count=6000&requestType=0',
+            f'https://api.finance.naver.com/siseJson.naver?symbol={code}&requestType=1&startTime=20140101&endTime={limit:%Y%m%d}&timeframe=day']
+    errors = []
+    for kind, url in enumerate(urls):
+        try:
+            response = requests.get(url, headers=headers, timeout=20)
+            response.raise_for_status()
+            payload = response.text
+            (out/'source_payloads'/f'{ticker}_naver_{kind}.txt').write_text(payload)
+            if kind == 0:
+                frame = parse_naver_chart(payload)
+            else:
+                values = ast.literal_eval(payload.strip())
+                rows = [row[:6] for row in values[1:] if len(row) >= 6]
+                frame = pd.DataFrame(rows, columns=['date', *PRICE_FIELDS])
+                frame['date'] = pd.to_datetime(frame.date.astype(str).str.strip(), format='%Y%m%d')
+                for name in PRICE_FIELDS:
+                    frame[name] = pd.to_numeric(frame[name], errors='raise')
+                if frame.date.duplicated().any():
+                    raise ValueError('Duplicate dates in Naver JSON')
+                frame = frame.set_index('date').sort_index()
+            frame = frame.loc[(frame.index >= '2014-01-01') & (frame.index <= pd.Timestamp(limit))]
+            if frame.empty:
+                raise ValueError('No observations in the requested date range')
+            return frame, {'ticker': ticker, 'source': 'Naver Finance', 'url': url,
+                           'first_date': str(frame.index.min().date()), 'last_date': str(frame.index.max().date()),
+                           'rows': len(frame), 'earlier_endpoint_errors': errors}
+        except Exception as error:
+            errors.append(f'{url}: {type(error).__name__}: {str(error)[:240]}')
+    raise RuntimeError(' | '.join(errors))
+
+
+def download_primary_naver(tickers, limit, out):
+    (out/'source_payloads').mkdir(parents=True, exist_ok=True)
+    prices, sources, errors = {}, [], {}
+    with ThreadPoolExecutor(max_workers=4) as pool:
+        futures = {pool.submit(fetch_naver, ticker, limit, out): ticker for ticker in tickers}
+        for future in as_completed(futures):
+            ticker = futures[future]
+            try:
+                frame, record = future.result()
+                prices[ticker] = frame
+                sources.append(record)
+                print(f'STAGE naver_download {ticker} rows={len(frame)} latest={record["last_date"]}', flush=True)
+            except Exception as error:
+                errors[ticker] = str(error)
+                print(f'STAGE naver_unavailable {ticker} {str(error)[:180]}', flush=True)
+    metadata = {'primary_source': 'Naver Finance complete per-ticker OHLCV history; Yahoo audit only',
+                'sources': sources, 'errors': errors,
+                'policy': 'Never impute missing prices or splice Yahoo observations into Naver histories'}
+    (out/'price_source_manifest.json').write_text(json.dumps(metadata, ensure_ascii=False, indent=2))
+    if BENCHMARK not in prices:
+        raise RuntimeError('Primary Naver Korean benchmark unavailable; refusing Yahoo or synthetic fallback')
+    return pd.concat(prices, axis=1).sort_index(), metadata
+
+
+def audit_sources(primary, yahoo, out):
+    audit, missing = [], []
+    for ticker in primary.columns.get_level_values(0).unique():
+        n = primary[ticker].dropna(subset=['Close'])
+        y = (yahoo[ticker].dropna(subset=['Close']) if yahoo is not None and not yahoo.empty
+             and ticker in yahoo.columns.get_level_values(0) else pd.DataFrame(columns=PRICE_FIELDS))
+        common = n.index.intersection(y.index)
+        absent = n.index.difference(y.index)
+        for date in absent:
+            missing.append({'ticker': ticker, 'date': str(date.date()), 'source_with_observation': 'Naver', 'missing_source': 'Yahoo'})
+        latest = n.index.max()
+        yclose = float(y.loc[latest, 'Close']) if latest in y.index else None
+        differences = ((n.loc[common, 'Close'] / y.loc[common, 'Close']) - 1).abs() if len(common) else pd.Series(dtype=float)
+        audit.append({'ticker': ticker, 'naver_rows': len(n), 'yahoo_rows': len(y),
+                      'common_rows': len(common), 'naver_dates_missing_in_yahoo': len(absent),
+                      'latest_date': str(latest.date()), 'latest_naver_close': float(n.loc[latest, 'Close']),
+                      'latest_yahoo_close': yclose,
+                      'latest_close_relative_difference': (float(n.loc[latest, 'Close']) / yclose - 1) if yclose else None,
+                      'common_close_difference_over_0_5pct_rows': int((differences > .005).sum()),
+                      'maximum_common_close_relative_difference': float(differences.max()) if len(differences) else None})
+    pd.DataFrame(audit).to_csv(out/'cross_source_audit.csv', index=False)
+    pd.DataFrame(missing).to_csv(out/'naver_dates_missing_from_yahoo.csv', index=False)
+    return audit
 
 
 def completed_date(now=None):
@@ -256,15 +363,37 @@ def main():
     (out/'models').mkdir(parents=True, exist_ok=True)
     (out/'universe.json').write_text(json.dumps(source, ensure_ascii=False, indent=2))
     print(f'STAGE download requested_symbols={len(tickers)} latest_allowed_date={limit}', flush=True)
-    raw = yf.download(tickers+[BENCHMARK], start='2014-01-01', end=str(limit+timedelta(days=1)),
-                      auto_adjust=False, actions=True, group_by='ticker', threads=4, progress=False, timeout=20)
-    if raw is None or raw.empty or BENCHMARK not in raw.columns.get_level_values(0):
-        raise RuntimeError('Real market data or Korean benchmark missing; no synthetic fallback')
-    raw.index = pd.DatetimeIndex(raw.index).tz_localize(None).normalize()
-    raw = raw.loc[raw.index <= pd.Timestamp(limit)]
+    yahoo = None
+    try:
+        yahoo = yf.download(tickers+[BENCHMARK], start='2014-01-01', end=str(limit+timedelta(days=1)),
+                            auto_adjust=False, actions=True, group_by='ticker', threads=4, progress=False, timeout=20)
+        if yahoo is not None and not yahoo.empty:
+            yahoo.index = pd.DatetimeIndex(yahoo.index).tz_localize(None).normalize()
+            yahoo = yahoo.loc[yahoo.index <= pd.Timestamp(limit)]
+            yahoo.to_csv(out/'ohlcv_yahoo_audit_only.csv')
+    except Exception as error:
+        (out/'yahoo_audit_download_error.txt').write_text(str(error))
+        print(f'STAGE yahoo_audit_unavailable {error}', flush=True)
+    raw, price_sources = download_primary_naver(tickers+[BENCHMARK], limit, out)
+    source_audit = audit_sources(raw, yahoo, out)
+    raw.to_csv(out/'ohlcv_naver_primary.csv')
     raw.to_csv(out/'ohlcv.csv')
     benchmark_frame = raw[BENCHMARK]
     calendar = benchmark_frame.loc[(benchmark_frame.Close > 0) & (benchmark_frame.Volume > 0)].index
+    traded = pd.DataFrame({ticker: (raw[ticker].Close > 0) & (raw[ticker].Volume > 0)
+                           for ticker in tickers if ticker in raw.columns.get_level_values(0)})
+    market_activity = traded.sum(axis=1)
+    missing_benchmark = market_activity[(market_activity >= max(3, len(traded.columns)//2)) & ~market_activity.index.isin(calendar)]
+    pd.DataFrame({'date': missing_benchmark.index, 'stocks_with_trades': missing_benchmark.to_numpy()}).to_csv(out/'benchmark_calendar_gaps.csv', index=False)
+    if len(missing_benchmark):
+        raise RuntimeError('Primary benchmark is missing sessions traded by many stocks; see benchmark_calendar_gaps.csv')
+    inspected_dates = []
+    for inspected in ['2024-01-15', '2025-09-19']:
+        date = pd.Timestamp(inspected)
+        inspected_dates.append({'date': inspected, 'benchmark_has_session': bool(date in calendar),
+                                'primary_stocks_with_trades': int(market_activity.get(date, 0)),
+                                'note': 'Prior Yahoo download anomalies; publisher observations retained, never imputed'})
+    (out/'previous_anomaly_dates_check.json').write_text(json.dumps(inspected_dates, indent=2))
     if len(calendar) < 400:
         raise RuntimeError('Insufficient Korean benchmark sessions')
     asof = calendar.max()
@@ -272,7 +401,7 @@ def main():
     frames, data_excluded, flags, quality = {}, {}, [], []
     for ticker in tickers:
         if ticker not in raw.columns.get_level_values(0) or raw[ticker].Close.notna().sum() == 0:
-            data_excluded[ticker] = 'Yahoo provided no prices'
+            data_excluded[ticker] = 'Primary Naver source provided no prices; see source manifest errors'
             continue
         d, invalid = clean_prices(raw[ticker], calendar)
         moves = d.Close.pct_change(fill_method=None)
@@ -303,6 +432,7 @@ def main():
               'lightgbm_version': lgb.__version__, 'features': FEATURES, 'parameters': PARAMETERS,
               'universe_count': len(stocks), 'download_usable_count': len(frames),
               'data_excluded': data_excluded, 'extreme_price_flags': flags,
+              'price_source_manifest': price_sources, 'cross_source_audit': source_audit,
               'minimum_latest_turnover_20d_krw': MIN_TURNOVER,
               'historical': historical, 'latest': latest, 'elapsed_seconds': time.perf_counter()-started,
               'limitations': ['Current manually declared sector membership; survivorship and sector-selection bias',
@@ -313,7 +443,7 @@ def main():
                              'Scores from separate models are uncalibrated and not directly verified success probabilities',
                              'Latest validation top-decile rates have small samples and are descriptive; validation also chose model iteration',
                              'Suspended/invalid sessions remain calendar gaps; windows touching such gaps have unknown labels',
-                             'Yahoo split-adjusted price data; dividends, costs, news and corporate actions not exhaustively verified',
+                             'Naver publisher price history; Yahoo is audit-only. No missing-price imputation or cross-source splicing. Dividends, costs, news and corporate actions not exhaustively verified',
                              'Historical rankings use same available eligible universe each date and do not apply the latest-only liquidity gate',
                              'Latest shortlist is mechanically top three eligible scores, not a demonstrated edge over volatility or per-ticker base rates']}
     result = safe_json(result)
