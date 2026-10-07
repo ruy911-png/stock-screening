@@ -1,0 +1,26 @@
+name: Biotech limit-down rebound study
+on:
+  push:
+    branches: [test/bio-limit-down-20261007]
+    paths: ['experiments/bio_limit_down/**', '.github/workflows/bio-limit-down.yml']
+permissions:
+  contents: read
+jobs:
+  study:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Verify closing event and next-session rules
+        run: python -m unittest discover -s experiments/bio_limit_down -p 'test_*.py' -v
+      - name: Fetch and calculate
+        run: python -u experiments/bio_limit_down/study.py
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: bio-limit-down-results
+          path: experiments/bio_limit_down/results/
+          retention-days: 7
