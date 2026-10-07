@@ -3,10 +3,12 @@
 No intraday lead-time or 60-minute crash claim can be made from these data.
 Thresholds are declared before fetching/evaluating the test observations.
 """
+import argparse
 import csv
 import hashlib
 import json
 import math
+import re
 import statistics
 import urllib.request
 import xml.etree.ElementTree as ET
@@ -27,6 +29,10 @@ PARAMETERS = {'high_vs_prev_close': .03, 'close_vs_high': -.05,
 
 
 def parse(payload):
+    if isinstance(payload, bytes):
+        declaration = re.search(br'encoding=[\"\x27]([^\"\x27]+)', payload[:200])
+        encoding = declaration.group(1).decode('ascii') if declaration else 'utf-8'
+        payload = payload.decode(encoding)
     rows = []
     for item in ET.fromstring(payload).iter('item'):
         v = item.attrib['data'].split('|')
@@ -96,6 +102,17 @@ def fetch(code, cutoff):
         return code, [], meta
 
 
+def cached(code, cutoff):
+    raw = (OUT / f'{code}.xml').read_bytes()
+    rows = [r for r in parse(raw) if r['date'] <= cutoff]
+    old = json.loads((OUT / 'manifest.json').read_text())
+    meta = next(x.copy() for x in old if x['code'] == code)
+    meta.pop('error', None)
+    meta.update(status='ok', sha256=hashlib.sha256(raw).hexdigest(), rows=len(rows),
+                first=rows[0]['date'], last=rows[-1]['date'], invalid_rows=sum(not valid(r) for r in rows))
+    return code, rows, meta
+
+
 def ratio(a, b):
     return a / b if b else None
 
@@ -126,13 +143,18 @@ def write_csv(path, rows):
 
 
 def main():
+    parser = argparse.ArgumentParser()
+    parser.add_argument('--from-cache', action='store_true', help='Replay the archived XML with its retrieval manifest')
+    args = parser.parse_args()
     OUT.mkdir(parents=True, exist_ok=True)
     now = datetime.now(ZoneInfo('Asia/Seoul'))
     cutoff = (now.date() if (now.hour, now.minute) >= (16, 0) else (now - timedelta(days=1)).date()).isoformat()
+    if args.from_cache:
+        cutoff = json.loads((OUT / 'summary.json').read_text())['cutoff']
     print('PREDECLARED ' + json.dumps({'parameters': PARAMETERS, 'universe': UNIVERSE, 'completed_cutoff': cutoff}, ensure_ascii=False), flush=True)
     datasets, manifests = {}, []
     with ThreadPoolExecutor(max_workers=3) as pool:
-        for future in as_completed([pool.submit(fetch, code, cutoff) for code in UNIVERSE]):
+        for future in as_completed([pool.submit(cached if args.from_cache else fetch, code, cutoff) for code in UNIVERSE]):
             code, rows, meta = future.result()
             datasets[code] = rows
             manifests.append(meta)

@@ -3,6 +3,10 @@ from daily import label, signals, parse
 
 
 class DailyTest(unittest.TestCase):
+    def test_euc_kr_xml(self):
+        xml = '<?xml version="1.0" encoding="EUC-KR"?><root name="효성"><item data="20261006|100|105|99|100|5"/></root>'
+        self.assertEqual(parse(xml.encode('euc-kr'))[0]['high'], 105)
+
     def test_shape_does_not_require_three_or_five_percent(self):
         x = label(dict(open=100, high=102, low=99.8, close=100.1), 100)
         self.assertTrue(x['upper_wick_event'])
