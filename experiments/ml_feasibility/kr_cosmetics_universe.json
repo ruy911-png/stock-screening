@@ -1,0 +1,427 @@
+{
+  "requested_as_of": "2026-10-07",
+  "source_reviewed_on": "2026-10-07",
+  "latest_completed_session_for_initial_download": "2026-10-06",
+  "status": "business-scope-and-code universe ready; current trading/suspension status must additionally be checked against latest OHLCV and exchange notices",
+  "universe_rule": "TIGER cosmetics ETF's 18 equity constituents displayed on FunETF on 2026-10-07, supplemented by 12 companies operating cosmetics brands, ODM/OEM, distribution, packaging or ingredients. Manually declared scope; not an exhaustive sector list and not selected using ML returns.",
+  "count": 30,
+  "source_notes": [
+    {
+      "url": "https://www.funetf.co.kr/product/etf/view/KR7228790002",
+      "observed_on": "2026-10-07",
+      "displayed_nav_as_of": "2026-10-06",
+      "note": "Live product page showed 18 equities plus cash. Holdings-specific as-of was not separately exposed in parsed text; do not imply an independently verified issuer holdings file."
+    },
+    {
+      "url": "https://www.tigeretf.com/ko/product/search/detail/index.do?ksdFund=KR7228790002",
+      "note": "Official issuer page returned HTTP403 during review. FunETF republication used for current holdings names/codes."
+    },
+    {
+      "url": "https://finance.naver.com/sise/sise_group_detail.naver?type=upjong&no=274",
+      "note": "Redirected to inaccessible new Naver industry page; not used as verified sector universe."
+    },
+    {
+      "url": "https://www.paxnet.co.kr/stock/infoStock/themaView?schThemaCode=0110",
+      "note": "Contains historical/delisted entries such as Yonwoo, so not accepted wholesale."
+    }
+  ],
+  "naming_and_corporate_action_notes": [
+    {
+      "code": "018290",
+      "name": "브이티",
+      "old_name": "브이티지엠피"
+    },
+    {
+      "code": "260930",
+      "name": "씨티케이",
+      "old_name": "씨티케이코스메틱스"
+    },
+    {
+      "code": "052260",
+      "name": "현대바이오랜드",
+      "old_name": "SK바이오랜드"
+    },
+    {
+      "code": "214450",
+      "name": "파마리서치",
+      "old_name": "파마리서치프로덕트",
+      "note": "KOSDAQ listing corroborated by 2026 news; mixed medical-aesthetics and cosmetics exposure, not a pure cosmetics company.",
+      "source_url": "https://view.asiae.co.kr/article/2026082620533956480"
+    },
+    {
+      "code": "003350",
+      "name": "한국화장품제조",
+      "note": "2026-04 share split disclosed; verify adjusted OHLC continuity before modelling.",
+      "source_url": "https://kind.krx.co.kr/external/2026/06/24/000920/20260624002046/00634.htm"
+    },
+    {
+      "code": "002790",
+      "name": "아모레퍼시픽홀딩스",
+      "old_name": "아모레G",
+      "note": "Not included: holding-company duplicate exposure avoided; current name checked in DART.",
+      "source_url": "https://englishdart.fss.or.kr/dsbc001/selectPopup.ax?selectKey=00154462"
+    },
+    {
+      "code": "036670",
+      "name": "삼양케이씨아이",
+      "old_name": "케이씨아이",
+      "note": "Not included in capped 30-company universe; old name should not be used if added later.",
+      "source_url": "https://biz.chosun.com/stock/c-biz_bot/2026/06/01/G4YTGNTBHFQTCMJQMFQWMMJXHE/?outputType=amp"
+    }
+  ],
+  "excluded": [
+    {
+      "code": "115960",
+      "name": "연우",
+      "reason": "Delisted in 2024 after becoming a wholly owned Korea Kolmar subsidiary; not a latest tradable candidate.",
+      "source_url": "https://invest.kiwoom.com/inv/search?code=&keyword=%EC%97%B0%EC%9A%B0&tp=1",
+      "issuer_source": "https://www.kolmarholdings.co.kr/kor/bbs/board.php?bo_table=press&page=30&sod=asc&sop=and&sst=wr_hit&wr_id=897"
+    },
+    {
+      "code": "025620",
+      "name": "차AI헬스케어",
+      "old_name": "제이준코스메틱",
+      "reason": "Name/business changed; not automatically treating historical cosmetic-theme membership as current pure cosmetics exposure.",
+      "source_url": "https://biz.chosun.com/stock/c-biz_bot/2026/05/15/GJTGGM3GGFQTEMTGHFRDMNJQGA/?outputType=amp"
+    }
+  ],
+  "limitations": [
+    "Current-sector membership creates survivorship/selection bias for historical tests.",
+    "This is not a complete KRX suspension/delisting registry check. Require fresh completed-session prices, positive trading volume and a current exchange-notice check for final latest candidates.",
+    "Yahoo suffixes follow KOSPI .KS and KOSDAQ .KQ; download must verify coverage and reject stale/mismatched securities rather than silently substituting.",
+    "Recent IPOs may lack enough pre-2022 data for the old experiment split; report exclusions explicitly instead of presenting the remaining group as all cosmetics stocks.",
+    "ETF includes mixed businesses. Pharmaresearch's medical aesthetics, APR's devices and LG/Aekyung household products are recorded explicitly."
+  ],
+  "stocks": [
+    {
+      "code": "192820",
+      "name": "코스맥스",
+      "market": "KOSPI",
+      "ticker": "192820.KS",
+      "yahoo_ticker": "192820.KS",
+      "category": "ODM/OEM",
+      "selection_source": "TIGER cosmetics ETF holding",
+      "source_url": "https://www.funetf.co.kr/product/etf/view/KR7228790002",
+      "checked_on": "2026-10-07"
+    },
+    {
+      "code": "161890",
+      "name": "한국콜마",
+      "market": "KOSPI",
+      "ticker": "161890.KS",
+      "yahoo_ticker": "161890.KS",
+      "category": "ODM/OEM",
+      "selection_source": "TIGER cosmetics ETF holding",
+      "source_url": "https://www.funetf.co.kr/product/etf/view/KR7228790002",
+      "checked_on": "2026-10-07"
+    },
+    {
+      "code": "278470",
+      "name": "에이피알",
+      "market": "KOSPI",
+      "ticker": "278470.KS",
+      "yahoo_ticker": "278470.KS",
+      "category": "브랜드·뷰티기기",
+      "selection_source": "TIGER cosmetics ETF holding",
+      "source_url": "https://www.funetf.co.kr/product/etf/view/KR7228790002",
+      "checked_on": "2026-10-07"
+    },
+    {
+      "code": "257720",
+      "name": "실리콘투",
+      "market": "KOSDAQ",
+      "ticker": "257720.KQ",
+      "yahoo_ticker": "257720.KQ",
+      "category": "화장품 유통·수출",
+      "selection_source": "TIGER cosmetics ETF holding",
+      "source_url": "https://www.funetf.co.kr/product/etf/view/KR7228790002",
+      "checked_on": "2026-10-07"
+    },
+    {
+      "code": "090430",
+      "name": "아모레퍼시픽",
+      "market": "KOSPI",
+      "ticker": "090430.KS",
+      "yahoo_ticker": "090430.KS",
+      "category": "브랜드",
+      "selection_source": "TIGER cosmetics ETF holding",
+      "source_url": "https://www.funetf.co.kr/product/etf/view/KR7228790002",
+      "checked_on": "2026-10-07"
+    },
+    {
+      "code": "051900",
+      "name": "LG생활건강",
+      "market": "KOSPI",
+      "ticker": "051900.KS",
+      "yahoo_ticker": "051900.KS",
+      "category": "브랜드·생활용품 혼합",
+      "selection_source": "TIGER cosmetics ETF holding",
+      "source_url": "https://www.funetf.co.kr/product/etf/view/KR7228790002",
+      "checked_on": "2026-10-07"
+    },
+    {
+      "code": "214450",
+      "name": "파마리서치",
+      "market": "KOSDAQ",
+      "ticker": "214450.KQ",
+      "yahoo_ticker": "214450.KQ",
+      "category": "화장품·의료미용 혼합",
+      "selection_source": "TIGER cosmetics ETF holding",
+      "source_url": "https://www.funetf.co.kr/product/etf/view/KR7228790002",
+      "checked_on": "2026-10-07"
+    },
+    {
+      "code": "241710",
+      "name": "코스메카코리아",
+      "market": "KOSDAQ",
+      "ticker": "241710.KQ",
+      "yahoo_ticker": "241710.KQ",
+      "category": "ODM/OEM",
+      "selection_source": "TIGER cosmetics ETF holding",
+      "source_url": "https://www.funetf.co.kr/product/etf/view/KR7228790002",
+      "checked_on": "2026-10-07"
+    },
+    {
+      "code": "483650",
+      "name": "달바글로벌",
+      "market": "KOSPI",
+      "ticker": "483650.KS",
+      "yahoo_ticker": "483650.KS",
+      "category": "브랜드",
+      "selection_source": "TIGER cosmetics ETF holding",
+      "source_url": "https://www.funetf.co.kr/product/etf/view/KR7228790002",
+      "checked_on": "2026-10-07"
+    },
+    {
+      "code": "251970",
+      "name": "펌텍코리아",
+      "market": "KOSDAQ",
+      "ticker": "251970.KQ",
+      "yahoo_ticker": "251970.KQ",
+      "category": "용기·펌프",
+      "selection_source": "TIGER cosmetics ETF holding",
+      "source_url": "https://www.funetf.co.kr/product/etf/view/KR7228790002",
+      "checked_on": "2026-10-07"
+    },
+    {
+      "code": "018290",
+      "name": "브이티",
+      "market": "KOSDAQ",
+      "ticker": "018290.KQ",
+      "yahoo_ticker": "018290.KQ",
+      "category": "브랜드",
+      "selection_source": "TIGER cosmetics ETF holding",
+      "source_url": "https://www.funetf.co.kr/product/etf/view/KR7228790002",
+      "checked_on": "2026-10-07"
+    },
+    {
+      "code": "439090",
+      "name": "마녀공장",
+      "market": "KOSDAQ",
+      "ticker": "439090.KQ",
+      "yahoo_ticker": "439090.KQ",
+      "category": "브랜드",
+      "selection_source": "TIGER cosmetics ETF holding",
+      "source_url": "https://www.funetf.co.kr/product/etf/view/KR7228790002",
+      "checked_on": "2026-10-07"
+    },
+    {
+      "code": "123330",
+      "name": "제닉",
+      "market": "KOSDAQ",
+      "ticker": "123330.KQ",
+      "yahoo_ticker": "123330.KQ",
+      "category": "ODM/OEM·마스크팩",
+      "selection_source": "TIGER cosmetics ETF holding",
+      "source_url": "https://www.funetf.co.kr/product/etf/view/KR7228790002",
+      "checked_on": "2026-10-07"
+    },
+    {
+      "code": "237880",
+      "name": "클리오",
+      "market": "KOSDAQ",
+      "ticker": "237880.KQ",
+      "yahoo_ticker": "237880.KQ",
+      "category": "브랜드",
+      "selection_source": "TIGER cosmetics ETF holding",
+      "source_url": "https://www.funetf.co.kr/product/etf/view/KR7228790002",
+      "checked_on": "2026-10-07"
+    },
+    {
+      "code": "114840",
+      "name": "아이패밀리에스씨",
+      "market": "KOSDAQ",
+      "ticker": "114840.KQ",
+      "yahoo_ticker": "114840.KQ",
+      "category": "브랜드",
+      "selection_source": "TIGER cosmetics ETF holding",
+      "source_url": "https://www.funetf.co.kr/product/etf/view/KR7228790002",
+      "checked_on": "2026-10-07"
+    },
+    {
+      "code": "352480",
+      "name": "씨앤씨인터내셔널",
+      "market": "KOSDAQ",
+      "ticker": "352480.KQ",
+      "yahoo_ticker": "352480.KQ",
+      "category": "ODM/OEM·색조",
+      "selection_source": "TIGER cosmetics ETF holding",
+      "source_url": "https://www.funetf.co.kr/product/etf/view/KR7228790002",
+      "checked_on": "2026-10-07"
+    },
+    {
+      "code": "214420",
+      "name": "토니모리",
+      "market": "KOSPI",
+      "ticker": "214420.KS",
+      "yahoo_ticker": "214420.KS",
+      "category": "브랜드",
+      "selection_source": "TIGER cosmetics ETF holding",
+      "source_url": "https://www.funetf.co.kr/product/etf/view/KR7228790002",
+      "checked_on": "2026-10-07"
+    },
+    {
+      "code": "226320",
+      "name": "잇츠한불",
+      "market": "KOSPI",
+      "ticker": "226320.KS",
+      "yahoo_ticker": "226320.KS",
+      "category": "브랜드·제조",
+      "selection_source": "TIGER cosmetics ETF holding",
+      "source_url": "https://www.funetf.co.kr/product/etf/view/KR7228790002",
+      "checked_on": "2026-10-07"
+    },
+    {
+      "code": "018250",
+      "name": "애경산업",
+      "market": "KOSPI",
+      "ticker": "018250.KS",
+      "yahoo_ticker": "018250.KS",
+      "category": "브랜드·생활용품 혼합",
+      "selection_source": "supplemental operating-business company",
+      "source_url": "https://kind.krx.co.kr/external/2026/03/26/002836/20260326005749/00634.htm",
+      "checked_on": "2026-10-07"
+    },
+    {
+      "code": "078520",
+      "name": "에이블씨엔씨",
+      "market": "KOSPI",
+      "ticker": "078520.KS",
+      "yahoo_ticker": "078520.KS",
+      "category": "브랜드",
+      "selection_source": "supplemental operating-business company",
+      "source_url": "https://www.awakeplus.co.kr/data/view/20260813001673",
+      "checked_on": "2026-10-07"
+    },
+    {
+      "code": "092730",
+      "name": "네오팜",
+      "market": "KOSDAQ",
+      "ticker": "092730.KQ",
+      "yahoo_ticker": "092730.KQ",
+      "category": "브랜드·더마화장품",
+      "selection_source": "supplemental operating-business company",
+      "source_url": "https://www.neopharm.co.kr/ko/company.do",
+      "checked_on": "2026-10-07"
+    },
+    {
+      "code": "003350",
+      "name": "한국화장품제조",
+      "market": "KOSPI",
+      "ticker": "003350.KS",
+      "yahoo_ticker": "003350.KS",
+      "category": "ODM/OEM",
+      "selection_source": "supplemental operating-business company",
+      "source_url": "https://kind.krx.co.kr/external/2026/06/24/000920/20260624002046/00634.htm",
+      "checked_on": "2026-10-07"
+    },
+    {
+      "code": "123690",
+      "name": "한국화장품",
+      "market": "KOSPI",
+      "ticker": "123690.KS",
+      "yahoo_ticker": "123690.KS",
+      "category": "브랜드",
+      "selection_source": "supplemental operating-business company",
+      "source_url": "https://biz.chosun.com/stock/c-biz_bot/2026/05/15/GJTGGM3GGFQTEMTGHFRDMNJQGA/?outputType=amp",
+      "checked_on": "2026-10-07"
+    },
+    {
+      "code": "027050",
+      "name": "코리아나",
+      "market": "KOSDAQ",
+      "ticker": "027050.KQ",
+      "yahoo_ticker": "027050.KQ",
+      "category": "브랜드",
+      "selection_source": "supplemental operating-business company",
+      "source_url": "https://biz.chosun.com/stock/c-biz_bot/2026/05/15/GJTGGM3GGFQTEMTGHFRDMNJQGA/?outputType=amp",
+      "checked_on": "2026-10-07"
+    },
+    {
+      "code": "950140",
+      "name": "잉글우드랩",
+      "market": "KOSDAQ",
+      "ticker": "950140.KQ",
+      "yahoo_ticker": "950140.KQ",
+      "category": "ODM/OEM",
+      "selection_source": "supplemental operating-business company",
+      "source_url": "https://kind.krx.co.kr/external/2026/03/19/002147/20260319008945/11011.htm",
+      "checked_on": "2026-10-07"
+    },
+    {
+      "code": "078140",
+      "name": "대봉엘에스",
+      "market": "KOSDAQ",
+      "ticker": "078140.KQ",
+      "yahoo_ticker": "078140.KQ",
+      "category": "원료",
+      "selection_source": "supplemental operating-business company",
+      "source_url": "https://biz.chosun.com/stock/c-biz_bot/2026/06/01/G4YTGNTBHFQTCMJQMFQWMMJXHE/?outputType=amp",
+      "checked_on": "2026-10-07"
+    },
+    {
+      "code": "086710",
+      "name": "선진뷰티사이언스",
+      "market": "KOSDAQ",
+      "ticker": "086710.KQ",
+      "yahoo_ticker": "086710.KQ",
+      "category": "원료·선케어",
+      "selection_source": "supplemental operating-business company",
+      "source_url": "https://biz.chosun.com/stock/c-biz_bot/2026/06/01/G4YTGNTBHFQTCMJQMFQWMMJXHE/?outputType=amp",
+      "checked_on": "2026-10-07"
+    },
+    {
+      "code": "265740",
+      "name": "엔에프씨",
+      "market": "KOSDAQ",
+      "ticker": "265740.KQ",
+      "yahoo_ticker": "265740.KQ",
+      "category": "원료·ODM/OEM",
+      "selection_source": "supplemental operating-business company",
+      "source_url": "https://biz.chosun.com/stock/c-biz_bot/2026/06/01/G4YTGNTBHFQTCMJQMFQWMMJXHE/?outputType=amp",
+      "checked_on": "2026-10-07"
+    },
+    {
+      "code": "260930",
+      "name": "씨티케이",
+      "market": "KOSDAQ",
+      "ticker": "260930.KQ",
+      "yahoo_ticker": "260930.KQ",
+      "category": "화장품 개발·플랫폼",
+      "selection_source": "supplemental operating-business company",
+      "source_url": "https://www.yna.co.kr/view/AKR20191213048251008",
+      "checked_on": "2026-10-07"
+    },
+    {
+      "code": "052260",
+      "name": "현대바이오랜드",
+      "market": "KOSDAQ",
+      "ticker": "052260.KQ",
+      "yahoo_ticker": "052260.KQ",
+      "category": "원료",
+      "selection_source": "supplemental operating-business company",
+      "source_url": "https://biz.chosun.com/stock/c-biz_bot/2026/06/01/G4YTGNTBHFQTCMJQMFQWMMJXHE/?outputType=amp",
+      "checked_on": "2026-10-07"
+    }
+  ]
+}
