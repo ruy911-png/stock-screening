@@ -1,0 +1,28 @@
+name: Daily upper-wick feasibility
+on:
+  push:
+    branches: [test/upper-wick-daily-20261007]
+    paths:
+      - 'experiments/reversal_warning/**'
+      - '.github/workflows/upper-wick-daily.yml'
+permissions:
+  contents: read
+jobs:
+  daily:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Test shape and causal inputs
+        run: python -m unittest discover -s experiments/reversal_warning -p 'test_*.py' -v
+      - name: Fetch actual daily candles and evaluate prior-day rules
+        run: python -u experiments/reversal_warning/daily.py
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: daily-upper-wick-results
+          path: experiments/reversal_warning/results/
+          retention-days: 7
